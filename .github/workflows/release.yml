@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, publish and update manifest
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Check tag matches project version
+        id: ver
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VERSION="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)"
+          case "$VERSION" in
+            "$TAG"|"$TAG.0") ;;
+            *) echo "::error::Tag $GITHUB_REF_NAME does not match Directory.Build.props version $VERSION"; exit 1 ;;
+          esac
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: dotnet test -c Release
+
+      - name: Package
+        id: pkg
+        run: |
+          export SOURCE_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          scripts/package.sh | tee pkg.txt
+          grep -E '^(version|target_abi|zip|md5)=' pkg.txt >> "$GITHUB_OUTPUT"
+          echo "timestamp=$SOURCE_DATE" >> "$GITHUB_OUTPUT"
+
+      - name: Release notes
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          awk -v v="## $V" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md | sed '/./,$!d' > notes.md
+          {
+            cat notes.md
+            echo
+            echo "**Install:** Jellyfin Dashboard → Plugins → Repositories → add \`https://holixplay.com/jellyfin/manifest.json\`, then install **Holix** from the catalog."
+            echo
+            echo "MD5 (\`holix_${{ steps.ver.outputs.version }}.zip\`): \`${{ steps.pkg.outputs.md5 }}\` · targetAbi \`${{ steps.pkg.outputs.target_abi }}\`"
+          } > release.md
+
+      - name: Create GitHub release
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Holix ${GITHUB_REF_NAME}" \
+            --notes-file release.md \
+            --verify-tag \
+            "${{ steps.pkg.outputs.zip }}" "${{ steps.pkg.outputs.zip }}.md5"
+
+      - name: Update manifest.json on main
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          ZIP="holix_${VERSION}.zip"
+          CHANGELOG="$(tr '\n' ' ' < notes.md | sed 's/  */ /g; s/^ //; s/ $//')"
+          git config user.name "Holix Play"
+          git config user.email "hello@holixplay.com"
+          git checkout -B main origin/main
+          python3 -I scripts/update-manifest.py \
+            --manifest manifest.json \
+            --version "$VERSION" \
+            --target-abi "${{ steps.pkg.outputs.target_abi }}" \
+            --source-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${ZIP}" \
+            --checksum "${{ steps.pkg.outputs.md5 }}" \
+            --timestamp "${{ steps.pkg.outputs.timestamp }}" \
+            --changelog "$CHANGELOG"
+          if git diff --quiet -- manifest.json; then
+            echo "manifest.json unchanged"
+            exit 0
+          fi
+          git add manifest.json
+          git commit -m "Update manifest for ${GITHUB_REF_NAME}"
+          git push origin main

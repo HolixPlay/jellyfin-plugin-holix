@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <Version>0.3.0.0</Version>
+    <AssemblyVersion>0.3.0.0</AssemblyVersion>
+    <FileVersion>0.3.0.0</FileVersion>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- NuGet packages of the Jellyfin 12.2.0 server; update together with the server version. -->
+    <JellyfinVersion>12.2.0</JellyfinVersion>
+  </PropertyGroup>
+</Project>

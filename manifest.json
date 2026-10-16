@@ -1,0 +1,12 @@
+[
+  {
+    "guid": "06f19487-387d-4e2f-be1d-71f44efff069",
+    "name": "Holix",
+    "description": "Server plugin for the Holix Play client. Every Holix profile is a hidden Jellyfin user, so watch state, Next Up and parental controls work natively on the server. Age ratings (all, 7+, 13+, 16+, 18+) become Jellyfin parental limits (TR/US/DE rating systems), profile sessions can require a PIN verified by holix-cloud (Ed25519-signed, single-use proof), and guest profiles keep no watch history.",
+    "overview": "Holix Play profiles: household profiles, parental controls, guest mode",
+    "owner": "Holix Play",
+    "category": "General",
+    "imageUrl": "https://raw.githubusercontent.com/HolixPlay/jellyfin-plugin-holix/main/assets/logo.png",
+    "versions": []
+  }
+]

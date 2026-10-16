@@ -1,0 +1,23 @@
+# jprm (Jellyfin Plugin Repository Manager) format; scripts/package.sh uses the same values.
+name: "Holix"
+guid: "06f19487-387d-4e2f-be1d-71f44efff069"
+version: "0.3.0.0"
+targetAbi: "12.2.0.0"
+framework: "net10.0"
+overview: "Holix Play: household/profile mapping, profile sessions, no watch history for guests"
+description: >
+  Server plugin for the Holix Play client. Each Holix profile is a hidden Jellyfin user; it provides
+  profile creation/editing/deletion with the household owner's token, parental limits from age ratings
+  (TR/US/DE), passwordless sessions on behalf of a profile, and no watch history for guest profiles.
+category: "General"
+owner: "Holix Play"
+artifacts:
+- "Jellyfin.Plugin.Holix.dll"
+- "BouncyCastle.Cryptography.dll"
+changelog: >
+  0.3.0.0: age thresholds moved to the band's age (US TV-Y7 is visible to a 7+ profile in every system;
+  TR/US/DE share the same threshold, the system only sets the label), Household/Link returns the current
+  household, PUT/DELETE /Holix/Profiles/{id}/Image (profile image stored as the Jellyfin UserImage).
+  0.2.0.0: profile sessions require a short-lived proof signed by holix-cloud (Ed25519; PIN enforced
+  server side), household ↔ holix-cloud linking (/Holix/Household/Link), mapping lock.
+  0.1.0.0: initial release — /Holix/Info, /Holix/Household, /Holix/Profiles CRUD, profile sessions, guest protection.

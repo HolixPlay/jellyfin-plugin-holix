@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Holix Play</title>
+</head>
+<body>
+    <div id="HolixConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-select,emby-checkbox,emby-textarea">
+        <div data-role="content">
+            <div class="content-primary">
+                <h2 class="sectionTitle">Holix Play</h2>
+                <p data-i18n="intro">Household and profile mapping for the Holix Play client. Each profile is a hidden Jellyfin user; birth dates and PINs never reach this server (they stay in holix-cloud) — only the parental limit derived from the age rating is written here. In a cloud-linked household, a profile session is opened with a short-lived proof that holix-cloud signs after verifying the PIN.</p>
+                <form id="HolixConfigForm">
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="CloudUrl" data-i18n="cloudUrl">holix-cloud URL</label>
+                        <input id="CloudUrl" name="CloudUrl" type="url" is="emby-input" placeholder="https://api.holixplay.com" />
+                        <div class="fieldDescription" data-i18n="cloudUrlDesc">Announced to clients in /Holix/Info. When linking a household, the plugin only contacts this URL (link code + public keys). Must use https. Default: the hosted Holix Play cloud.</div>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="RequireCloudProof" type="checkbox" is="emby-checkbox" />
+                            <span data-i18n="requireProof">Require a holix-cloud proof for profile sessions in cloud-linked households (recommended)</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription" data-i18n="requireProofDesc">When on, the owner token alone is not enough: a PIN-protected profile cannot be opened until holix-cloud verifies the PIN, and the profiles' cloud mapping is locked.</div>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="RequireCloudLink" type="checkbox" is="emby-checkbox" />
+                            <span data-i18n="requireLink">Refuse profile sessions in households not linked to holix-cloud</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription" data-i18n="requireLinkDesc">When off (transition period), unlinked households keep the old behaviour and sessions open with a warning.</div>
+                    </div>
+                    <div class="selectContainer">
+                        <label class="selectLabel" for="GuestBehavior" data-i18n="guestBehavior">Guest profile behaviour</label>
+                        <select is="emby-select" id="GuestBehavior" name="GuestBehavior" class="emby-select-withcolor emby-select">
+                            <option value="DiscardPlaystate" data-i18n="guestDiscardPlaystate">No history (position, played flag and play count are discarded)</option>
+                            <option value="DiscardAllUserData" data-i18n="guestDiscardAll">No history, favorites, likes or ratings</option>
+                            <option value="KeepPlaystate" data-i18n="guestKeep">Protection off (guest behaves like a regular user)</option>
+                        </select>
+                    </div>
+                    <div class="selectContainer">
+                        <label class="selectLabel" for="DefaultRatingSystem" data-i18n="ratingSystem">Rating system for new households</label>
+                        <select is="emby-select" id="DefaultRatingSystem" name="DefaultRatingSystem" class="emby-select-withcolor emby-select">
+                            <option value="TR" data-i18n="ratingTR">Turkey (RTÜK)</option>
+                            <option value="US" data-i18n="ratingUS">United States (MPA / TV)</option>
+                            <option value="DE" data-i18n="ratingDE">Germany (FSK)</option>
+                        </select>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="MaxProfilesPerHousehold" data-i18n="maxProfiles">Maximum profiles per household (including the owner)</label>
+                        <input id="MaxProfilesPerHousehold" name="MaxProfilesPerHousehold" type="number" is="emby-input" min="1" max="50" />
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="BlockUnratedForChildren" type="checkbox" is="emby-checkbox" />
+                            <span data-i18n="blockUnrated">Hide unrated content on child profiles</span>
+                        </label>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="DefaultChildBlockedTags" data-i18n="childTags">Blocked tags for children (comma-separated)</label>
+                        <input id="DefaultChildBlockedTags" type="text" is="emby-input" />
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="AllowNonAdminOwners" type="checkbox" is="emby-checkbox" />
+                            <span data-i18n="allowNonAdmin">Allow non-administrator users to create households</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription" data-i18n="allowNonAdminDesc">A household owner can create (hidden, unprivileged) users on the server. When off, only administrators and the users listed below can.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="AllowedOwnerUserIds" data-i18n="allowedOwners">User ids allowed to create households (comma-separated)</label>
+                        <input id="AllowedOwnerUserIds" type="text" is="emby-input" />
+                    </div>
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                            <span data-i18n="save">Save</span>
+                        </button>
+                    </div>
+                </form>
+                <h3 class="sectionTitle" data-i18n="households">Households</h3>
+                <div id="HolixHouseholds" class="fieldDescription" data-i18n="loading">Loading…</div>
+            </div>
+        </div>
+        <script type="text/javascript">
+            (function () {
+                var pluginId = '06f19487-387d-4e2f-be1d-71f44efff069';
+                var page = document.querySelector('#HolixConfigPage');
+
+                var strings = {
+                    en: {
+                        intro: "Household and profile mapping for the Holix Play client. Each profile is a hidden Jellyfin user; birth dates and PINs never reach this server (they stay in holix-cloud) — only the parental limit derived from the age rating is written here. In a cloud-linked household, a profile session is opened with a short-lived proof that holix-cloud signs after verifying the PIN.",
+                        cloudUrl: 'holix-cloud URL',
+                        cloudUrlDesc: 'Announced to clients in /Holix/Info. When linking a household, the plugin only contacts this URL (link code + public keys). Must use https. Default: the hosted Holix Play cloud.',
+                        requireProof: 'Require a holix-cloud proof for profile sessions in cloud-linked households (recommended)',
+                        requireProofDesc: "When on, the owner token alone is not enough: a PIN-protected profile cannot be opened until holix-cloud verifies the PIN, and the profiles' cloud mapping is locked.",
+                        requireLink: 'Refuse profile sessions in households not linked to holix-cloud',
+                        requireLinkDesc: 'When off (transition period), unlinked households keep the old behaviour and sessions open with a warning.',
+                        guestBehavior: 'Guest profile behaviour',
+                        guestDiscardPlaystate: 'No history (position, played flag and play count are discarded)',
+                        guestDiscardAll: 'No history, favorites, likes or ratings',
+                        guestKeep: 'Protection off (guest behaves like a regular user)',
+                        ratingSystem: 'Rating system for new households',
+                        ratingTR: 'Turkey (RTÜK)',
+                        ratingUS: 'United States (MPA / TV)',
+                        ratingDE: 'Germany (FSK)',
+                        maxProfiles: 'Maximum profiles per household (including the owner)',
+                        blockUnrated: 'Hide unrated content on child profiles',
+                        childTags: 'Blocked tags for children (comma-separated)',
+                        allowNonAdmin: 'Allow non-administrator users to create households',
+                        allowNonAdminDesc: 'A household owner can create (hidden, unprivileged) users on the server. When off, only administrators and the users listed below can.',
+                        allowedOwners: 'User ids allowed to create households (comma-separated)',
+                        save: 'Save',
+                        households: 'Households',
+                        loading: 'Loading…',
+                        noHouseholds: 'No households yet.',
+                        loadFailed: 'Could not load the household list.',
+                        actionFailed: 'The operation failed.',
+                        linked: 'holix-cloud: linked (household {0}, {1}) ',
+                        notLinked: 'holix-cloud: not linked. Link code: ',
+                        unlink: 'Unlink',
+                        unlinkConfirm: 'After unlinking, profile sessions in this household open without a proof. Continue?',
+                        relink: 'Relink',
+                        link: 'Link',
+                        owner: 'owner',
+                        notMapped: 'not mapped to the cloud'
+                    },
+                    tr: {
+                        intro: "Holix Play istemcisi için hane/profil eşleme. Her profil gizli bir Jellyfin kullanıcısıdır; doğum tarihi ve PIN bu sunucuya gelmez (holix-cloud'da), sunucuya yalnız yaş derecesinden türetilen ebeveyn sınırı yazılır. Buluta bağlı hanede profil oturumu, holix-cloud'un PIN doğrulamasından sonra imzaladığı kısa ömürlü kanıtla açılır.",
+                        cloudUrl: 'holix-cloud adresi',
+                        cloudUrlDesc: 'İstemciye /Holix/Info içinde bildirilir. Hane bağlanırken eklenti yalnız bu adrese gider (bağlama kodu + public anahtarlar). https olmalı. Varsayılan: barındırılan Holix Play bulutu.',
+                        requireProof: 'Buluta bağlı hanede profil oturumu holix-cloud kanıtı istesin (önerilen)',
+                        requireProofDesc: "Açıkken sahip belirteci tek başına yetmez: PIN'li profil, PIN holix-cloud'da doğrulanmadan açılamaz; profillerin bulut eşlemesi kilitlenir.",
+                        requireLink: 'Buluta bağlı olmayan hanelerde profil oturumu açılmasın',
+                        requireLinkDesc: 'Kapalıyken (geçiş dönemi) bağsız hane eski davranışla, uyarıyla açılır.',
+                        guestBehavior: 'Misafir profil davranışı',
+                        guestDiscardPlaystate: 'Geçmiş tutulmaz (konum, izlendi, oynatma sayısı silinir)',
+                        guestDiscardAll: 'Geçmiş + favori/beğeni/puan tutulmaz',
+                        guestKeep: 'Koruma kapalı (misafir normal kullanıcı gibi)',
+                        ratingSystem: 'Yeni hanelerde derece sistemi',
+                        ratingTR: 'Türkiye (RTÜK)',
+                        ratingUS: 'ABD (MPA / TV)',
+                        ratingDE: 'Almanya (FSK)',
+                        maxProfiles: 'Hane başına en çok profil (sahip dahil)',
+                        blockUnrated: 'Çocuk profillerde derecesiz içeriği gizle',
+                        childTags: 'Çocuklar için engelli etiketler (virgülle)',
+                        allowNonAdmin: 'Yönetici olmayan kullanıcılar hane açabilsin',
+                        allowNonAdminDesc: 'Hane sahibi sunucuda (gizli, yetkisiz) kullanıcı açabilir. Kapalıyken yalnız yöneticiler ve aşağıdaki listedekiler.',
+                        allowedOwners: 'Hane açabilecek kullanıcı kimlikleri (virgülle)',
+                        save: 'Kaydet',
+                        households: 'Haneler',
+                        loading: 'Yükleniyor…',
+                        noHouseholds: 'Henüz hane yok.',
+                        loadFailed: 'Hane listesi alınamadı.',
+                        actionFailed: 'İşlem başarısız.',
+                        linked: 'holix-cloud: bağlı (hane {0}, {1}) ',
+                        notLinked: 'holix-cloud: bağlı değil. Bağlama kodu: ',
+                        unlink: 'Bağı kaldır',
+                        unlinkConfirm: 'Bağ kaldırılınca bu hanede profil oturumu kanıtsız açılır. Devam?',
+                        relink: 'Yeniden bağla',
+                        link: 'Bağla',
+                        owner: 'sahip',
+                        notMapped: 'buluta eşlenmemiş'
+                    }
+                };
+                var lang = (document.documentElement.lang || navigator.language || '').toLowerCase().startsWith('tr') ? 'tr' : 'en';
+
+                function t(key) {
+                    var args = Array.prototype.slice.call(arguments, 1);
+                    var s = (strings[lang] && strings[lang][key]) || strings.en[key] || key;
+                    return s.replace(/\{(\d+)\}/g, function (m, i) { return args[i] !== undefined ? String(args[i]) : m; });
+                }
+
+                function applyTranslations() {
+                    Array.prototype.forEach.call(page.querySelectorAll('[data-i18n]'), function (el) {
+                        el.textContent = t(el.getAttribute('data-i18n'));
+                    });
+                }
+
+                function splitList(value) {
+                    return (value || '').split(/[,\n]/).map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
+                }
+
+                function text(tag, value) {
+                    var el = document.createElement(tag);
+                    el.textContent = value;
+                    return el;
+                }
+
+                function linkUrl(h) {
+                    return ApiClient.getUrl('Holix/Admin/Households/' + h.OwnerUserId + '/Link');
+                }
+
+                function afterChange(promise) {
+                    Dashboard.showLoadingMsg();
+                    promise.then(function () {
+                        Dashboard.hideLoadingMsg();
+                        loadHouseholds();
+                    }, function (err) {
+                        Dashboard.hideLoadingMsg();
+                        var msg = t('actionFailed');
+                        if (err && err.json) {
+                            err.json().then(function (b) { Dashboard.alert(b.Message || msg); }, function () { Dashboard.alert(msg); });
+                        } else {
+                            Dashboard.alert(msg);
+                        }
+                    });
+                }
+
+                function linkControls(h) {
+                    var div = document.createElement('div');
+                    if (h.Cloud) {
+                        div.appendChild(text('span', t('linked', h.Cloud.HouseholdId, h.Cloud.CloudUrl)));
+                        var unlink = document.createElement('button');
+                        unlink.type = 'button';
+                        unlink.className = 'emby-button';
+                        unlink.textContent = t('unlink');
+                        unlink.addEventListener('click', function () {
+                            if (window.confirm(t('unlinkConfirm'))) {
+                                afterChange(ApiClient.ajax({ type: 'DELETE', url: linkUrl(h) }));
+                            }
+                        });
+                        div.appendChild(unlink);
+                    } else {
+                        div.appendChild(text('span', t('notLinked')));
+                    }
+                    var code = document.createElement('input');
+                    code.type = 'text';
+                    code.placeholder = 'ABCD-EFGH';
+                    code.size = 10;
+                    var link = document.createElement('button');
+                    link.type = 'button';
+                    link.className = 'emby-button';
+                    link.textContent = h.Cloud ? t('relink') : t('link');
+                    link.addEventListener('click', function () {
+                        afterChange(ApiClient.ajax({
+                            type: 'POST',
+                            url: linkUrl(h),
+                            data: JSON.stringify({ Code: code.value.trim() }),
+                            contentType: 'application/json'
+                        }));
+                    });
+                    div.appendChild(code);
+                    div.appendChild(link);
+                    return div;
+                }
+
+                function renderHouseholds(list) {
+                    var root = page.querySelector('#HolixHouseholds');
+                    root.textContent = '';
+                    if (!list || list.length === 0) {
+                        root.textContent = t('noHouseholds');
+                        return;
+                    }
+                    list.forEach(function (h) {
+                        root.appendChild(text('strong', h.OwnerName + ' (' + h.RatingSystem + ')'));
+                        root.appendChild(linkControls(h));
+                        var ul = document.createElement('ul');
+                        h.Profiles.forEach(function (p) {
+                            ul.appendChild(text('li', p.Name + ' · ' + p.Kind + ' · ' + p.AgeRating + (p.IsOwner ? ' · ' + t('owner') : ' · ' + p.UserName) + (p.HolixProfileId ? '' : ' · ' + t('notMapped'))));
+                        });
+                        root.appendChild(ul);
+                    });
+                }
+
+                function loadHouseholds() {
+                    ApiClient.getJSON(ApiClient.getUrl('Holix/Admin/Households')).then(renderHouseholds, function () {
+                        page.querySelector('#HolixHouseholds').textContent = t('loadFailed');
+                    });
+                }
+
+                applyTranslations();
+
+                page.addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        page.querySelector('#CloudUrl').value = config.CloudUrl || '';
+                        page.querySelector('#RequireCloudProof').checked = config.RequireCloudProof !== false;
+                        page.querySelector('#RequireCloudLink').checked = config.RequireCloudLink === true;
+                        page.querySelector('#GuestBehavior').value = config.GuestBehavior || 'DiscardPlaystate';
+                        page.querySelector('#DefaultRatingSystem').value = config.DefaultRatingSystem || 'TR';
+                        page.querySelector('#MaxProfilesPerHousehold').value = config.MaxProfilesPerHousehold || 10;
+                        page.querySelector('#BlockUnratedForChildren').checked = config.BlockUnratedForChildren;
+                        page.querySelector('#DefaultChildBlockedTags').value = (config.DefaultChildBlockedTags || []).join(', ');
+                        page.querySelector('#AllowNonAdminOwners').checked = config.AllowNonAdminOwners;
+                        page.querySelector('#AllowedOwnerUserIds').value = (config.AllowedOwnerUserIds || []).join(', ');
+                        Dashboard.hideLoadingMsg();
+                    });
+                    loadHouseholds();
+                });
+
+                page.querySelector('#HolixConfigForm').addEventListener('submit', function (e) {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        config.CloudUrl = page.querySelector('#CloudUrl').value.trim();
+                        config.RequireCloudProof = page.querySelector('#RequireCloudProof').checked;
+                        config.RequireCloudLink = page.querySelector('#RequireCloudLink').checked;
+                        config.GuestBehavior = page.querySelector('#GuestBehavior').value;
+                        config.DefaultRatingSystem = page.querySelector('#DefaultRatingSystem').value;
+                        config.MaxProfilesPerHousehold = parseInt(page.querySelector('#MaxProfilesPerHousehold').value, 10) || 10;
+                        config.BlockUnratedForChildren = page.querySelector('#BlockUnratedForChildren').checked;
+                        config.DefaultChildBlockedTags = splitList(page.querySelector('#DefaultChildBlockedTags').value);
+                        config.AllowNonAdminOwners = page.querySelector('#AllowNonAdminOwners').checked;
+                        config.AllowedOwnerUserIds = splitList(page.querySelector('#AllowedOwnerUserIds').value);
+                        ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        });
+                    });
+                    e.preventDefault();
+                    return false;
+                });
+            })();
+        </script>
+    </div>
+</body>
+</html>
