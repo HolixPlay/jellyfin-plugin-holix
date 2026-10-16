@@ -98,12 +98,23 @@ public sealed class CloudProofVerifierTests
     [Fact]
     public void Expired_proof_is_rejected()
     {
-        // After exp + 30 s clock skew.
-        Assert.Equal("proof_expired", Rejected(Token(), now: DateTimeOffset.FromUnixTimeSeconds(1_800_000_090)));
+        // After exp + 10 s clock skew.
+        Assert.Equal("proof_expired", Rejected(Token(), now: DateTimeOffset.FromUnixTimeSeconds(1_800_000_070)));
         // Still valid within the skew.
-        CloudProofVerifier.Verify(Token(), Link(), Child(), DateTimeOffset.FromUnixTimeSeconds(1_800_000_089), _replay);
+        CloudProofVerifier.Verify(Token(), Link(), Child(), DateTimeOffset.FromUnixTimeSeconds(1_800_000_069), _replay);
         // Not yet valid (iat in the future).
         Assert.Equal("proof_not_yet_valid", Rejected(Token(), now: DateTimeOffset.FromUnixTimeSeconds(1_799_999_900)));
+    }
+
+    [Fact]
+    public void Future_iat_skew_is_ten_seconds()
+    {
+        Assert.Equal(10, CloudProofVerifier.ClockSkewSeconds);
+
+        // iat = now + 10 s is still accepted; now + 11 s is not.
+        CloudProofVerifier.Verify(Token(), Link(), Child(), DateTimeOffset.FromUnixTimeSeconds(1_799_999_990), _replay);
+        Assert.Equal("proof_not_yet_valid", Rejected(Token(), now: DateTimeOffset.FromUnixTimeSeconds(1_799_999_989)));
+        Assert.Equal("proof_not_yet_valid", Rejected(Token(c => c["nbf"] = 1_800_000_021L)));
     }
 
     [Fact]

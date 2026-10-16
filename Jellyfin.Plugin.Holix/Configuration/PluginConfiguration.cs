@@ -61,6 +61,13 @@ public class PluginConfiguration : BasePluginConfiguration
 
     /// <summary>Gets or sets the tags blocked by default for child profiles.</summary>
     public string[] DefaultChildBlockedTags { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the addresses (CIDR, or single IPs) of the reverse proxies allowed to call
+    /// <c>GET /Holix/StreamAuth</c> (forwardAuth / <c>auth_request</c>). Empty (default): loopback and private
+    /// networks (10/8, 172.16/12, 192.168/16, fc00::/7). Other callers get 404.
+    /// </summary>
+    public string[] StreamAuthAllowedProxies { get; set; } = [];
 #pragma warning restore CA1819
 
     /// <summary>Gets or sets the maximum profiles per household (including the owner); same as holix-cloud (10).</summary>

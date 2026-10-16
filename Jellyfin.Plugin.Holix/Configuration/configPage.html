@@ -71,6 +71,11 @@
                         <label class="inputLabel inputLabelUnfocused" for="AllowedOwnerUserIds" data-i18n="allowedOwners">User ids allowed to create households (comma-separated)</label>
                         <input id="AllowedOwnerUserIds" type="text" is="emby-input" />
                     </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="StreamAuthAllowedProxies" data-i18n="streamAuthProxies">Reverse proxies allowed to call /Holix/StreamAuth (CIDR, comma-separated)</label>
+                        <input id="StreamAuthAllowedProxies" type="text" is="emby-input" />
+                        <div class="fieldDescription" data-i18n="streamAuthProxiesDesc">Empty: loopback and private networks only. Requests from other addresses get 404.</div>
+                    </div>
                     <div>
                         <button is="emby-button" type="submit" class="raised button-submit block emby-button">
                             <span data-i18n="save">Save</span>
@@ -109,6 +114,8 @@
                         allowNonAdmin: 'Allow non-administrator users to create households',
                         allowNonAdminDesc: 'A household owner can create (hidden, unprivileged) users on the server. When off, only administrators and the users listed below can.',
                         allowedOwners: 'User ids allowed to create households (comma-separated)',
+                        streamAuthProxies: 'Reverse proxies allowed to call /Holix/StreamAuth (CIDR, comma-separated)',
+                        streamAuthProxiesDesc: 'Empty: loopback and private networks only. Requests from other addresses get 404.',
                         save: 'Save',
                         households: 'Households',
                         loading: 'Loading…',
@@ -146,6 +153,8 @@
                         allowNonAdmin: 'Yönetici olmayan kullanıcılar hane açabilsin',
                         allowNonAdminDesc: 'Hane sahibi sunucuda (gizli, yetkisiz) kullanıcı açabilir. Kapalıyken yalnız yöneticiler ve aşağıdaki listedekiler.',
                         allowedOwners: 'Hane açabilecek kullanıcı kimlikleri (virgülle)',
+                        streamAuthProxies: '/Holix/StreamAuth\'u çağırabilecek ters vekiller (CIDR, virgülle)',
+                        streamAuthProxiesDesc: 'Boş: yalnız loopback ve özel ağlar. Diğer adreslerden gelen istekler 404 alır.',
                         save: 'Kaydet',
                         households: 'Haneler',
                         loading: 'Yükleniyor…',
@@ -283,6 +292,7 @@
                         page.querySelector('#DefaultChildBlockedTags').value = (config.DefaultChildBlockedTags || []).join(', ');
                         page.querySelector('#AllowNonAdminOwners').checked = config.AllowNonAdminOwners;
                         page.querySelector('#AllowedOwnerUserIds').value = (config.AllowedOwnerUserIds || []).join(', ');
+                        page.querySelector('#StreamAuthAllowedProxies').value = (config.StreamAuthAllowedProxies || []).join(', ');
                         Dashboard.hideLoadingMsg();
                     });
                     loadHouseholds();
@@ -301,6 +311,7 @@
                         config.DefaultChildBlockedTags = splitList(page.querySelector('#DefaultChildBlockedTags').value);
                         config.AllowNonAdminOwners = page.querySelector('#AllowNonAdminOwners').checked;
                         config.AllowedOwnerUserIds = splitList(page.querySelector('#AllowedOwnerUserIds').value);
+                        config.StreamAuthAllowedProxies = splitList(page.querySelector('#StreamAuthAllowedProxies').value);
                         ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
                         });

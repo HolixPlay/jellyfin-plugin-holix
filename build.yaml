@@ -1,7 +1,7 @@
 # jprm (Jellyfin Plugin Repository Manager) format; scripts/package.sh uses the same values.
 name: "Holix"
 guid: "06f19487-387d-4e2f-be1d-71f44efff069"
-version: "0.3.0.0"
+version: "0.4.0.0"
 targetAbi: "12.2.0.0"
 framework: "net10.0"
 overview: "Holix Play: household/profile mapping, profile sessions, no watch history for guests"
@@ -15,6 +15,10 @@ artifacts:
 - "Jellyfin.Plugin.Holix.dll"
 - "BouncyCastle.Cryptography.dll"
 changelog: >
+  0.4.0.0: GET /Holix/StreamAuth forwardAuth endpoint (reverse proxy closes Jellyfin's unauthenticated stream
+  URLs; token + parental/library check per item, 60 s cache), Turkish rating labels Jellyfin does not know
+  ("Genel İzleyici", "7 yaş ve üzeri", RTÜK content signs …) are scored by the plugin, proof clock-skew
+  allowance lowered to 10 s.
   0.3.0.0: age thresholds moved to the band's age (US TV-Y7 is visible to a 7+ profile in every system;
   TR/US/DE share the same threshold, the system only sets the label), Household/Link returns the current
   household, PUT/DELETE /Holix/Profiles/{id}/Image (profile image stored as the Jellyfin UserImage).

@@ -38,6 +38,8 @@ public sealed class HolixController : ControllerBase
         "owner-policy-sync",
         "cloud-proof",
         "profile-image",
+        "stream-auth",
+        "tr-rating-aliases",
     ];
 
     private readonly HouseholdService _service;

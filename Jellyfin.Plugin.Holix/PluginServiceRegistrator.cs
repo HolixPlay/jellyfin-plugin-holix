@@ -1,8 +1,12 @@
+using System;
 using Jellyfin.Plugin.Holix.Cloud;
 using Jellyfin.Plugin.Holix.Guest;
 using Jellyfin.Plugin.Holix.Households;
+using Jellyfin.Plugin.Holix.Ratings;
+using Jellyfin.Plugin.Holix.StreamAuth;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jellyfin.Plugin.Holix;
@@ -18,5 +22,9 @@ public sealed class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<HouseholdService>();
         serviceCollection.AddHostedService<GuestPlaystateGuard>();
         serviceCollection.AddHostedService<OwnerPolicySync>();
+        serviceCollection.AddHostedService<TurkishRatingSupport>();
+        serviceCollection.AddSingleton<IStreamAccessBackend, JellyfinStreamAccessBackend>();
+        serviceCollection.AddSingleton(sp => new StreamAuthorizer(sp.GetRequiredService<IStreamAccessBackend>(), TimeProvider.System));
+        serviceCollection.AddTransient<IStartupFilter, StreamAuthPeerStartupFilter>();
     }
 }

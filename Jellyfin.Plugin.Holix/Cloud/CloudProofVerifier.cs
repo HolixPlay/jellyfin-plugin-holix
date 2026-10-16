@@ -86,7 +86,7 @@ public static class CloudProofVerifier
     public const long MaxLifetimeSeconds = 60;
 
     /// <summary>The allowed clock skew (seconds).</summary>
-    public const long ClockSkewSeconds = 30;
+    public const long ClockSkewSeconds = 10;
 
     /// <summary>The error code for an unknown key.</summary>
     public const string UnknownKeyCode = "proof_unknown_key";

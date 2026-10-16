@@ -22,7 +22,8 @@ profile).
 - **Age rating → parental limit.** Birth dates never reach the server (they stay in holix-cloud). The client
   sends the profile's age band (`all`, `7+`, `13+`, `16+`, `18+`); the plugin writes the matching Jellyfin
   `MaxParentalRating` / `MaxParentalSubRating`, blocked tags and (for children) hides unrated content.
-  Rating systems: Turkey (RTÜK), US (MPA/TV), Germany (FSK).
+  Rating systems: Turkey (RTÜK), US (MPA/TV), Germany (FSK). Turkish labels that Jellyfin does not know
+  (e.g. "Genel İzleyici", "7 yaş ve üzeri") are scored by the plugin instead of being treated as unrated.
 - **Profile sessions with server-side PIN.** `POST /Holix/Profiles/{id}/Session` issues a Jellyfin access
   token for a profile. Profiles have no usable password. In a household linked to holix-cloud the request must
   carry a short-lived (≤ 60 s), single-use proof that holix-cloud signs (Ed25519) only after the profile PIN was
@@ -30,6 +31,10 @@ profile).
 - **Guest profiles keep no history.** Playback position, played state, play count and last-played date are
   discarded for guest profiles (optionally favourites/likes/ratings too).
 - **Profile pictures** are stored as the Jellyfin user image, so other Jellyfin clients show them as well.
+- **Stream authorization for reverse proxies.** `GET /Holix/StreamAuth` is a Traefik `forwardAuth` / nginx
+  `auth_request` endpoint that closes Jellyfin's unauthenticated stream URLs at the proxy: a stream is only
+  served to a valid token whose user may see that item (see
+  [Closing the stream gap at the reverse proxy](#closing-the-stream-gap-at-the-reverse-proxy)).
 - **Settings page** in the dashboard: holix-cloud URL, proof enforcement, guest behaviour, default rating
   system, who may own a household, profile limit, child defaults, and a list of households with cloud
   link/unlink.
@@ -66,9 +71,9 @@ Download `holix_<version>.zip` from the [releases](https://github.com/HolixPlay/
 page and unpack it into Jellyfin's plugin directory, then restart Jellyfin:
 
 ```sh
-sudo mkdir -p /var/lib/jellyfin/plugins/Holix_0.3.0.0
-sudo unzip -o holix_0.3.0.0.zip -d /var/lib/jellyfin/plugins/Holix_0.3.0.0
-sudo chown -R jellyfin:jellyfin /var/lib/jellyfin/plugins/Holix_0.3.0.0
+sudo mkdir -p /var/lib/jellyfin/plugins/Holix_0.4.0.0
+sudo unzip -o holix_0.4.0.0.zip -d /var/lib/jellyfin/plugins/Holix_0.4.0.0
+sudo chown -R jellyfin:jellyfin /var/lib/jellyfin/plugins/Holix_0.4.0.0
 sudo systemctl restart jellyfin
 ```
 
@@ -100,6 +105,7 @@ lost, the profile users stay in Jellyfin but the mapping is gone.
 | `DefaultRatingSystem` | `TR` | Rating system for new households (`TR`, `US`, `DE`) |
 | `MaxProfilesPerHousehold` | 10 | Including the owner |
 | `BlockUnratedForChildren` | on | Hide unrated movies/series/trailers/Live TV/channel content for child profiles (music and books excluded) |
+| `StreamAuthAllowedProxies` | empty | Addresses (CIDR or single IPs) allowed to call `/Holix/StreamAuth`. Empty: loopback and private networks (10/8, 172.16/12, 192.168/16, fc00::/7). Other callers get 404 |
 | `DefaultChildBlockedTags` | empty | Tags blocked for every child profile |
 | `AllowNonAdminOwners` / `AllowedOwnerUserIds` | off / empty | Who may become a household owner (see below) |
 
@@ -140,7 +146,7 @@ lost, the profile users stay in Jellyfin but the mapping is gone.
   | `kid` in the cached JWKS; on a miss the JWKS is re-fetched at most every 5 min (key rotation) | `proof_unknown_key` |
   | `aud = holix-jellyfin-plugin` | `proof_wrong_audience` |
   | `iss` equals the value learnt when linking | `proof_wrong_issuer` |
-  | Lifetime `exp − iat` 1–60 s; `iat`/`nbf` ≤ now + 30 s; now < `exp` + 30 s | `invalid_proof`, `proof_not_yet_valid`, `proof_expired` |
+  | Lifetime `exp − iat` 1–60 s; `iat`/`nbf` ≤ now + 10 s; now < `exp` + 10 s | `invalid_proof`, `proof_not_yet_valid`, `proof_expired` |
   | `hid` = linked household, `jf_sid` = this server's `SystemId` | `proof_wrong_household`, `proof_wrong_server` |
   | `jf_uid` = requested profile user **and** `pid` = the profile's `HolixProfileId` | `proof_wrong_profile` |
   | `kind` = profile kind (not checked for the owner) | `proof_kind_mismatch` |
@@ -166,8 +172,8 @@ lost, the profile users stay in Jellyfin but the mapping is gone.
      change profile settings (for example raise a child profile's age band; the change applies to that
      profile's existing sessions immediately, and only new sessions are re-checked against holix-cloud). The
      client must store it securely (keychain); treat it like a password.
-  3. Used `jti` values are kept in memory; after a server restart a proof captured in the preceding ≤ 90 s
-     (60 s lifetime + 30 s clock-skew allowance) could be replayed once (and still only together with the
+  3. Used `jti` values are kept in memory; after a server restart a proof captured in the preceding ≤ 70 s
+     (60 s lifetime + 10 s clock-skew allowance) could be replayed once (and still only together with the
      owner token).
   4. Proofs are checked when a session is opened; issued Jellyfin tokens live on until revoked
      (`DELETE /Holix/Profiles/{id}/Session`, e.g. after a PIN change).
@@ -175,9 +181,10 @@ lost, the profile users stay in Jellyfin but the mapping is gone.
      profile), but Jellyfin's **static stream URL (`/Videos/{id}/stream`) and item images need no
      authentication at all**, and its HLS endpoints check the token but not the parental limit. Anyone who
      already knows an item ID can therefore stream it regardless of profile; IDs are not discoverable with a
-     child profile's token. To close this, require authentication for `/Videos/*/stream*` at the reverse proxy
-     (most Jellyfin clients send `api_key` or the `Authorization` header with stream requests; DLNA renderers
-     may not).
+     child profile's token. **Close this at the reverse proxy with `/Holix/StreamAuth`** (see
+     [below](#closing-the-stream-gap-at-the-reverse-proxy)); its decisions are cached for 60 s, so a revoked
+     token or a stricter limit applies to streams within 60 s. Item images stay public. Clients that do not
+     send a token with stream requests (some DLNA renderers) stop working behind it.
 - **Household ownership is a privilege**: an owner can create (hidden, non-admin) users on the server.
   That is why only administrators may own households by default. Profiles never get more library access than
   the owner, and a stricter parental limit on the owner also caps every profile.
@@ -185,6 +192,109 @@ lost, the profile users stay in Jellyfin but the mapping is gone.
 
 Please report security issues privately to **security@holixplay.com** (or via GitHub's private vulnerability
 reporting) rather than opening a public issue.
+
+## Closing the stream gap at the reverse proxy
+
+`GET /Holix/StreamAuth` lets the reverse proxy ask the plugin, for every media request, whether the caller may
+stream that item. Route only stream paths through it (`/Videos/{id}/…`, `/Audio/{id}/…`); everything else goes
+to Jellyfin directly.
+
+| Input | |
+|---|---|
+| Path | `X-Forwarded-Uri` (+ `X-Forwarded-Method`); without it the request's own path |
+| Token | `Authorization: MediaBrowser … Token="…"` (also `Emby`, `X-Emby-Authorization`), `X-Emby-Token`, `X-MediaBrowser-Token`, then `api_key` / `ApiKey` in the forwarded URI's query (or the request's own query) |
+
+Recognised paths (case-insensitive, GUID with or without dashes, an optional base-URL prefix):
+`/Videos/{id}/stream[.ext]`, `/Videos/{id}/master.m3u8`, `/Videos/{id}/main.m3u8`, `/Videos/{id}/live.m3u8`,
+`/Videos/{id}/hls1/…`, `/Videos/{id}/{mediaSourceId}/…` (any deeper path), `/Audio/{id}/stream[.ext]`,
+`/Audio/{id}/universal`, `/Audio/{id}/master.m3u8`, `/Audio/{id}/main.m3u8`, `/Audio/{id}/hls1/…`.
+
+| Result | When |
+|---|---|
+| `204` | Token valid and the user may see the item (or a server API key); also for paths that are not stream paths and for `OPTIONS` |
+| `401` | No token or invalid token |
+| `403` | User disabled, or the item is not visible to the user — the same check as Jellyfin's `GET /Users/{userId}/Items/{itemId}` (`BaseItem.IsVisibleStandalone`: library access, parental rating, unrated blocking, blocked/allowed tags, parent folders) |
+| `404` | No such item; or the caller is not in `StreamAuthAllowedProxies` |
+
+Decisions are cached per (token, item) for 60 s (at most 10 000 entries), so HLS segment requests do not hit
+the database. The allow list is checked against the directly connected address, before Jellyfin applies
+`X-Forwarded-For` from its known proxies. The proxy itself must still refuse `/Holix/StreamAuth` from the
+internet (the examples below do), because a request relayed by the proxy comes from an allowed address.
+
+### Traefik (file provider)
+
+```yaml
+http:
+  middlewares:
+    holix-stream-auth:
+      forwardAuth:
+        address: "http://jellyfin:8096/Holix/StreamAuth"
+        trustForwardHeader: false
+    holix-deny:
+      ipAllowList:
+        sourceRange: ["127.0.0.1/32"]
+
+  routers:
+    jellyfin:
+      rule: "Host(`jellyfin.example.com`)"
+      entryPoints: [websecure]
+      service: jellyfin
+      tls: {}
+    jellyfin-streams:
+      rule: "Host(`jellyfin.example.com`) && PathRegexp(`(?i)^(/[^/]+)?/(videos|audio)/[0-9a-f-]{32,36}/`)"
+      priority: 1000
+      entryPoints: [websecure]
+      service: jellyfin
+      middlewares: [holix-stream-auth]
+      tls: {}
+    jellyfin-streamauth-external:
+      rule: "Host(`jellyfin.example.com`) && PathRegexp(`(?i)/holix/streamauth`)"
+      priority: 1001
+      entryPoints: [websecure]
+      service: jellyfin
+      middlewares: [holix-deny]
+      tls: {}
+
+  services:
+    jellyfin:
+      loadBalancer:
+        servers:
+          - url: "http://jellyfin:8096"
+```
+
+Traefik forwards the client's headers and sets `X-Forwarded-Uri` / `X-Forwarded-Method` itself
+(`trustForwardHeader: false` ignores client-supplied values).
+
+### nginx (`auth_request`)
+
+```nginx
+# Stream paths: ask the plugin first.
+location ~* ^/(videos|audio)/[0-9a-f-]{32,36}/ {
+    auth_request /_holix_stream_auth;
+    # auth_request turns any status other than 2xx/401/403 into 500; map it back to 404 (unknown item).
+    error_page 500 =404 /_holix_not_found;
+    proxy_pass http://jellyfin:8096;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_buffering off;
+}
+
+location = /_holix_stream_auth {
+    internal;
+    proxy_pass http://jellyfin:8096/Holix/StreamAuth;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+    proxy_set_header X-Forwarded-Uri $request_uri;
+    proxy_set_header X-Forwarded-Method $request_method;
+    proxy_set_header Host $host;
+}
+
+location = /_holix_not_found { internal; return 404; }
+
+# Never expose the endpoint itself.
+location ~* ^/holix/streamauth { return 404; }
+```
 
 ## API
 
@@ -210,6 +320,7 @@ Errors: `{"Error": "<code>", "Message": "…"}`.
 | `PUT /Holix/Profiles/{id}/Image` | owner | Raw JPEG or PNG body (≤ 2 MB). Stored as the Jellyfin user image. 413 `image_too_large`, 415 `unsupported_image` |
 | `DELETE /Holix/Profiles/{id}/Image` | owner | Removes the profile's Jellyfin user image |
 | `GET /Holix/Admin/Households` | admin | All households (settings page) |
+| `GET /Holix/StreamAuth` | proxy only | forwardAuth / `auth_request` decision for stream paths: 204 / 401 / 403 / 404, empty body (see above) |
 | `POST` / `DELETE /Holix/Admin/Households/{ownerId}/Link` | admin | Link / re-link with `{Code}`; unlink |
 
 \* By default only Jellyfin administrators may create a household; see `AllowNonAdminOwners` /
@@ -268,6 +379,23 @@ rating system only chooses the label.
 | PG (10/0), TV-PG-* (10/1), TR 10A/10+, FSK 12, PG-13 (13/0), TR 13A/13+ (13/0, 13/1) | `13+` |
 | TV-14, TV-14-* (14/0, 14/1), TR 16+ (16/0), FSK 16 | `16+` |
 | R (17/0), NC-17/TV-MA (17/1), TR 18+, FSK 18, TV-X (18) | `18+` |
+
+Turkish labels missing from Jellyfin's `tr.json` are added to Jellyfin's rating lookup by the plugin at start-up
+(an extra rating system consulted after all built-in ones, so built-in scores never change; item metadata is
+not modified). Existing items carrying such a label get their stored score recomputed once, which is what a
+metadata refresh would do. Sources: RTÜK [Akıllı İşaretler Uygulama Esas ve İlkeleri](https://www.rtuk.gov.tr/Media/FM/Birimler/izleme/ai_rehber/1-_bolum_-_uygulama_esas_ve_ilkeleri.pdf)
+(age signs Genel İzleyici, 7+, 13+, 18+) and [content signs](https://www.rtuk.gov.tr/haber-bultenleri-ve-haber-programlarina-akilli-isaret-kullanma-zorunlulugu-getirildi/4836)
+(Şiddet/Korku, Cinsellik, Olumsuz Örnek Oluşturabilecek Davranışlar).
+
+| Label (any case, Turkish or ASCII letters) | Score/sub | Lowest band |
+|---|---|---|
+| Genel İzleyici, Genel İzleyici Kitlesi, Genel, Tüm Yaşlar, Her Yaş | 0/0 | `all` |
+| 7+, 7 yaş ve üzeri / üstü | 7/0 | `7+` |
+| 6 yaş ve üzeri (= 6+), 10 yaş ve üzeri (= 10+) | 6/1, 10/1 | `7+`, `13+` |
+| 13+, 13 yaş ve üzeri / üstü | 13/1 | `13+` |
+| 16 yaş ve üzeri (= 16+) | 16/0 | `16+` |
+| 18+, 18 yaş ve üzeri / üstü | 18/0 | `18+` |
+| Content sign without an age: Olumsuz Öğeler İçerir, Olumsuz Örnek Oluşturabilecek Davranışlar, Şiddet/Korku, Şiddet ve Korku, Cinsellik | 18/0 (fails closed) | `18+` |
 
 If the owner's own `MaxParentalRating` is stricter, profiles cannot exceed it. Threshold changes are applied
 to existing profiles at plugin start-up, or on demand with `POST /Holix/Household/Sync`.
