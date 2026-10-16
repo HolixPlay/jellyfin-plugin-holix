@@ -166,10 +166,18 @@ lost, the profile users stay in Jellyfin but the mapping is gone.
      change profile settings (for example raise a child profile's age band; the change applies to that
      profile's existing sessions immediately, and only new sessions are re-checked against holix-cloud). The
      client must store it securely (keychain); treat it like a password.
-  3. Used `jti` values are kept in memory; after a server restart a proof captured in the preceding ≤ 60 s
-     could be replayed once (and still only together with the owner token).
+  3. Used `jti` values are kept in memory; after a server restart a proof captured in the preceding ≤ 90 s
+     (60 s lifetime + 30 s clock-skew allowance) could be replayed once (and still only together with the
+     owner token).
   4. Proofs are checked when a session is opened; issued Jellyfin tokens live on until revoked
      (`DELETE /Holix/Profiles/{id}/Session`, e.g. after a PIN change).
+  5. Parental limits hide items from every list, search and item/playback-info endpoint (404 for a child
+     profile), but Jellyfin's **static stream URL (`/Videos/{id}/stream`) and item images need no
+     authentication at all**, and its HLS endpoints check the token but not the parental limit. Anyone who
+     already knows an item ID can therefore stream it regardless of profile; IDs are not discoverable with a
+     child profile's token. To close this, require authentication for `/Videos/*/stream*` at the reverse proxy
+     (most Jellyfin clients send `api_key` or the `Authorization` header with stream requests; DLNA renderers
+     may not).
 - **Household ownership is a privilege**: an owner can create (hidden, non-admin) users on the server.
   That is why only administrators may own households by default. Profiles never get more library access than
   the owner, and a stricter parental limit on the owner also caps every profile.
