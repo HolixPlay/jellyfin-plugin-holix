@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/HolixPlay/jellyfin-plugin-holix/main/assets/logo.png",
     "versions": [
       {
+        "version": "0.5.0.0",
+        "changelog": "- New `ClipsUrl` setting (Dashboard → Plugins → Holix): the address of the holix-clips service that makes short background preview clips for this server. It is announced to clients as `ClipsUrl` in `/Holix/Info`, so it no longer has to be typed into every client. Left out of the response when empty or not an absolute http(s) URL; a trailing `/` is removed. The plugin never contacts this URL. New feature flag `clips-url`.",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HolixPlay/jellyfin-plugin-holix/releases/download/v0.5.0/holix_0.5.0.0.zip",
+        "checksum": "3997091b3489e1b70977e993d3f86134",
+        "timestamp": "2026-10-18T19:31:12Z"
+      },
+      {
         "version": "0.4.0.0",
         "changelog": "- New `GET /Holix/StreamAuth`: a Traefik `forwardAuth` / nginx `auth_request` endpoint that closes Jellyfin's unauthenticated stream URLs at the reverse proxy. Stream paths (`/Videos/{id}/…`, `/Audio/{id}/…`) are allowed only for a valid token whose user may see the item (library access, parental rating, blocked tags — Jellyfin's own item check): 204 / 401 / 403 / 404. Decisions are cached for 60 s (max. 10 000 entries). Callable only from `StreamAuthAllowedProxies` (new setting; default loopback and private networks). Traefik and nginx examples in the README. - Turkish rating labels that Jellyfin does not know — \"Genel İzleyici\" (and \"Genel\", \"GENEL\", …), \"7 yaş ve üzeri\", \"13 yaş ve üzeri\", \"18 yaş ve üzeri\" and RTÜK content signs such as \"Olumsuz Öğeler İçerir\" — are now scored by the plugin instead of being treated as unrated, so child profiles no longer hide general-audience Turkish content. Item metadata is not changed; existing items are rescored once at start-up. - holix-cloud proof clock-skew allowance lowered from 30 s to 10 s (`exp` and future `iat`/`nbf`); a proof captured before a server restart can now be replayed for at most 70 s instead of 90 s.",
         "targetAbi": "12.2.0.0",
