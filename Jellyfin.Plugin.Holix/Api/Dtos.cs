@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using MediaBrowser.Controller.Authentication;
 
 namespace Jellyfin.Plugin.Holix.Api;
@@ -23,6 +24,13 @@ public sealed class InfoDto
 
     /// <summary>Gets or sets the holix-cloud URL (empty = not configured).</summary>
     public string? CloudUrl { get; set; }
+
+    /// <summary>
+    /// Gets or sets the holix-clips preview clip service URL (no trailing <c>/</c>). Omitted from the JSON
+    /// when the administrator has not set one (or set an invalid one).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ClipsUrl { get; set; }
 
     /// <summary>Gets or sets the guest behaviour.</summary>
     public string GuestBehavior { get; set; } = string.Empty;

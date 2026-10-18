@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+- New `ClipsUrl` setting (Dashboard → Plugins → Holix): the address of the holix-clips service that makes
+  short background preview clips for this server. It is announced to clients as `ClipsUrl` in `/Holix/Info`,
+  so it no longer has to be typed into every client. Left out of the response when empty or not an absolute
+  http(s) URL; a trailing `/` is removed. The plugin never contacts this URL. New feature flag `clips-url`.
+
 ## 0.4.0
 
 - New `GET /Holix/StreamAuth`: a Traefik `forwardAuth` / nginx `auth_request` endpoint that closes Jellyfin's

@@ -16,6 +16,11 @@
                         <input id="CloudUrl" name="CloudUrl" type="url" is="emby-input" placeholder="https://api.holixplay.com" />
                         <div class="fieldDescription" data-i18n="cloudUrlDesc">Announced to clients in /Holix/Info. When linking a household, the plugin only contacts this URL (link code + public keys). Must use https. Default: the hosted Holix Play cloud.</div>
                     </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="ClipsUrl" data-i18n="clipsUrl">holix-clips URL (preview clips)</label>
+                        <input id="ClipsUrl" name="ClipsUrl" type="url" is="emby-input" placeholder="https://jellyfin.example.com/holix-clips" />
+                        <div class="fieldDescription" data-i18n="clipsUrlDesc">Address of the holix-clips service that makes the short background preview clips for this server. Announced to clients in /Holix/Info so nobody has to type it in. Leave empty if you do not run holix-clips; clients then use their own setting.</div>
+                    </div>
                     <div class="checkboxContainer checkboxContainer-withDescription">
                         <label class="emby-checkbox-label">
                             <input id="RequireCloudProof" type="checkbox" is="emby-checkbox" />
@@ -96,6 +101,8 @@
                         intro: "Household and profile mapping for the Holix Play client. Each profile is a hidden Jellyfin user; birth dates and PINs never reach this server (they stay in holix-cloud) — only the parental limit derived from the age rating is written here. In a cloud-linked household, a profile session is opened with a short-lived proof that holix-cloud signs after verifying the PIN.",
                         cloudUrl: 'holix-cloud URL',
                         cloudUrlDesc: 'Announced to clients in /Holix/Info. When linking a household, the plugin only contacts this URL (link code + public keys). Must use https. Default: the hosted Holix Play cloud.',
+                        clipsUrl: 'holix-clips URL (preview clips)',
+                        clipsUrlDesc: 'Address of the holix-clips service that makes the short background preview clips for this server. Announced to clients in /Holix/Info so nobody has to type it in. Leave empty if you do not run holix-clips; clients then use their own setting.',
                         requireProof: 'Require a holix-cloud proof for profile sessions in cloud-linked households (recommended)',
                         requireProofDesc: "When on, the owner token alone is not enough: a PIN-protected profile cannot be opened until holix-cloud verifies the PIN, and the profiles' cloud mapping is locked.",
                         requireLink: 'Refuse profile sessions in households not linked to holix-cloud',
@@ -135,6 +142,8 @@
                         intro: "Holix Play istemcisi için hane/profil eşleme. Her profil gizli bir Jellyfin kullanıcısıdır; doğum tarihi ve PIN bu sunucuya gelmez (holix-cloud'da), sunucuya yalnız yaş derecesinden türetilen ebeveyn sınırı yazılır. Buluta bağlı hanede profil oturumu, holix-cloud'un PIN doğrulamasından sonra imzaladığı kısa ömürlü kanıtla açılır.",
                         cloudUrl: 'holix-cloud adresi',
                         cloudUrlDesc: 'İstemciye /Holix/Info içinde bildirilir. Hane bağlanırken eklenti yalnız bu adrese gider (bağlama kodu + public anahtarlar). https olmalı. Varsayılan: barındırılan Holix Play bulutu.',
+                        clipsUrl: 'holix-clips adresi (önizleme kesitleri)',
+                        clipsUrlDesc: "Bu sunucunun kısa arka plan önizleme kesitlerini üreten holix-clips servisinin adresi. İstemcilere /Holix/Info içinde bildirilir, kimsenin elle girmesi gerekmez. holix-clips çalıştırmıyorsanız boş bırakın; istemciler kendi ayarlarını kullanır.",
                         requireProof: 'Buluta bağlı hanede profil oturumu holix-cloud kanıtı istesin (önerilen)',
                         requireProofDesc: "Açıkken sahip belirteci tek başına yetmez: PIN'li profil, PIN holix-cloud'da doğrulanmadan açılamaz; profillerin bulut eşlemesi kilitlenir.",
                         requireLink: 'Buluta bağlı olmayan hanelerde profil oturumu açılmasın',
@@ -283,6 +292,7 @@
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                         page.querySelector('#CloudUrl').value = config.CloudUrl || '';
+                        page.querySelector('#ClipsUrl').value = config.ClipsUrl || '';
                         page.querySelector('#RequireCloudProof').checked = config.RequireCloudProof !== false;
                         page.querySelector('#RequireCloudLink').checked = config.RequireCloudLink === true;
                         page.querySelector('#GuestBehavior').value = config.GuestBehavior || 'DiscardPlaystate';
@@ -302,6 +312,7 @@
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                         config.CloudUrl = page.querySelector('#CloudUrl').value.trim();
+                        config.ClipsUrl = page.querySelector('#ClipsUrl').value.trim();
                         config.RequireCloudProof = page.querySelector('#RequireCloudProof').checked;
                         config.RequireCloudLink = page.querySelector('#RequireCloudLink').checked;
                         config.GuestBehavior = page.querySelector('#GuestBehavior').value;

@@ -31,6 +31,14 @@ public class PluginConfiguration : BasePluginConfiguration
     public string CloudUrl { get; set; } = "https://api.holixplay.com";
 
     /// <summary>
+    /// Gets or sets the base URL of the holix-clips preview clip service for this server (for example
+    /// <c>https://jellyfin.example.com/holix-clips</c>). Announced to clients as <c>ClipsUrl</c> in
+    /// <c>/Holix/Info</c> so they do not have to enter it by hand. Empty (default): not announced; clients fall
+    /// back to their own setting. The plugin never contacts this URL.
+    /// </summary>
+    public string ClipsUrl { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets a value indicating whether a cloud-linked household needs a holix-cloud proof
     /// (<c>JellyfinProof</c>) to open a profile session. On by default.
     /// </summary>

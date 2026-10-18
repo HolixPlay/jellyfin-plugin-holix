@@ -5,6 +5,7 @@ using System.Net.Mime;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Database.Implementations.Entities;
+using Jellyfin.Plugin.Holix.Configuration;
 using Jellyfin.Plugin.Holix.Households;
 using Jellyfin.Plugin.Holix.Images;
 using Jellyfin.Plugin.Holix.Ratings;
@@ -40,6 +41,7 @@ public sealed class HolixController : ControllerBase
         "profile-image",
         "stream-auth",
         "tr-rating-aliases",
+        "clips-url",
     ];
 
     private readonly HouseholdService _service;
@@ -64,12 +66,21 @@ public sealed class HolixController : ControllerBase
 #pragma warning restore CA1822
     {
         var plugin = Plugin.Instance;
-        var config = plugin?.Configuration;
+        return BuildInfo(plugin?.Configuration, plugin?.Version);
+    }
+
+    /// <summary>Builds the <c>/Holix/Info</c> body from the plugin settings.</summary>
+    /// <param name="config">The plugin configuration (null before the plugin is loaded).</param>
+    /// <param name="version">The plugin version.</param>
+    /// <returns>The info body.</returns>
+    internal static InfoDto BuildInfo(PluginConfiguration? config, Version? version)
+    {
         return new InfoDto
         {
-            Version = plugin?.Version.ToString() ?? "0.0.0.0",
+            Version = version?.ToString() ?? "0.0.0.0",
             Features = FeatureList,
             CloudUrl = string.IsNullOrWhiteSpace(config?.CloudUrl) ? null : config.CloudUrl.Trim(),
+            ClipsUrl = NormalizeClipsUrl(config?.ClipsUrl),
             GuestBehavior = config?.GuestBehavior.ToString() ?? string.Empty,
             RatingSystems = Enum.GetNames<RatingSystem>(),
             DefaultRatingSystem = RatingSystems.TryParse(config?.DefaultRatingSystem, out var s) ? s.Value.ToString() : nameof(RatingSystem.TR),
@@ -78,6 +89,34 @@ public sealed class HolixController : ControllerBase
             RequireCloudProof = config?.RequireCloudProof ?? true,
             RequireCloudLink = config?.RequireCloudLink ?? false,
         };
+    }
+
+    /// <summary>
+    /// Normalizes the administrator's holix-clips URL: an absolute http(s) URL without query, fragment or user
+    /// info, without a trailing <c>/</c>. Anything else (empty, relative, other schemes) gives null, so the
+    /// field is left out of <c>/Holix/Info</c>.
+    /// </summary>
+    /// <param name="url">The configured URL.</param>
+    /// <returns>The URL to announce, or null.</returns>
+    internal static string? NormalizeClipsUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+
+        var trimmed = url.Trim().TrimEnd('/');
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
+            || string.IsNullOrEmpty(uri.Host)
+            || !string.IsNullOrEmpty(uri.Query)
+            || !string.IsNullOrEmpty(uri.Fragment)
+            || !string.IsNullOrEmpty(uri.UserInfo))
+        {
+            return null;
+        }
+
+        return trimmed;
     }
 
     /// <summary>The caller's household (owner: all profiles; profile: only itself).</summary>
