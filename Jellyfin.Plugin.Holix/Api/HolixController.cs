@@ -41,6 +41,7 @@ public sealed class HolixController : ControllerBase
         "profile-image",
         "stream-auth",
         "tr-rating-aliases",
+        "household-session-limit",
     ];
 
     private readonly HouseholdService _service;

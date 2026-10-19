@@ -30,14 +30,17 @@ profile).
   verified — so a PIN cannot be bypassed by calling the server directly.
 - **Guest profiles keep no history.** Playback position, played state, play count and last-played date are
   discarded for guest profiles (optionally favourites/likes/ratings too).
+- **Household-wide session limit.** Profiles copy the owner's simultaneous-session limit, and the owner plus
+  all profiles together can watch on at most that many screens — a household with ten profiles cannot open
+  ten streams when the owner is allowed two (see [Session limit](#session-limit)).
 - **Profile pictures** are stored as the Jellyfin user image, so other Jellyfin clients show them as well.
 - **Stream authorization for reverse proxies.** `GET /Holix/StreamAuth` is a Traefik `forwardAuth` / nginx
   `auth_request` endpoint that closes Jellyfin's unauthenticated stream URLs at the proxy: a stream is only
   served to a valid token whose user may see that item (see
   [Closing the stream gap at the reverse proxy](#closing-the-stream-gap-at-the-reverse-proxy)).
 - **Settings page** in the dashboard: holix-cloud URL, proof enforcement, guest behaviour, default rating
-  system, who may own a household, profile limit, child defaults, and a list of households with cloud
-  link/unlink.
+  system, who can create a household (everyone, administrators, or users picked by name), profile limit, child
+  defaults, and a list of households with cloud link/unlink.
 
 ## Requirements
 
@@ -107,13 +110,14 @@ lost, the profile users stay in Jellyfin but the mapping is gone.
 | `BlockUnratedForChildren` | on | Hide unrated movies/series/trailers/Live TV/channel content for child profiles (music and books excluded) |
 | `StreamAuthAllowedProxies` | empty | Addresses (CIDR or single IPs) allowed to call `/Holix/StreamAuth`. Empty: loopback and private networks (10/8, 172.16/12, 192.168/16, fc00::/7). Other callers get 404 |
 | `DefaultChildBlockedTags` | empty | Tags blocked for every child profile |
-| `AllowNonAdminOwners` / `AllowedOwnerUserIds` | off / empty | Who may become a household owner (see below) |
+| `HouseholdOwners` | `Everyone` | Who may create a household: `Everyone`, `AdminsOnly` or `SelectedUsers` (picked by name on the settings page; stored as user IDs in `AllowedOwnerUserIds`). Administrators always may. Only affects new households (see [Household ownership](#household-ownership)) |
 
 ### First-time setup
 
 1. Create a **regular (non-administrator) Jellyfin user** for the household and give it the libraries the
-   family should see. Add its user ID to *Users allowed to create a household* (or enable *Non-admin users can
-   create households*).
+   family should see, and if you like a *Maximum number of simultaneous user sessions* — it covers the whole
+   household. With *Who can create a household* = *Everyone* (the default) nothing else is needed; with
+   *Selected users*, tick the user's name on the plugin settings page.
 2. Sign in with that user in Holix Play; the app creates the household (`POST /Holix/Household`) and links it
    to holix-cloud. Alternatively an administrator can enter a link code for a household on the settings page.
 3. Create profiles in the app. Child profiles get their limits from the age band.
@@ -185,10 +189,62 @@ lost, the profile users stay in Jellyfin but the mapping is gone.
      [below](#closing-the-stream-gap-at-the-reverse-proxy)); its decisions are cached for 60 s, so a revoked
      token or a stricter limit applies to streams within 60 s. Item images stay public. Clients that do not
      send a token with stream requests (some DLNA renderers) stop working behind it.
-- **Household ownership is a privilege**: an owner can create (hidden, non-admin) users on the server.
-  That is why only administrators may own households by default. Profiles never get more library access than
-  the owner, and a stricter parental limit on the owner also caps every profile.
+- **Household ownership** lets a user create (hidden, non-admin) users on the server — at most
+  `MaxProfilesPerHousehold − 1` per household. It is not a privilege escalation: profiles never get more
+  library, channel, device or playback rights than the owner, administrative rights are always off, a stricter
+  parental limit on the owner caps every profile, and the owner's session limit covers the whole household.
+  That is why *Everyone* is the default; administrators who do not want the extra hidden users can choose
+  *Administrators only* or *Selected users*.
 - **Birth dates never reach the server**; only the derived threshold and the age band label are stored.
+
+### Household ownership
+
+*Dashboard → Plugins → Holix → Who can create a household*:
+
+| Choice | Who can create a household |
+|---|---|
+| **Everyone** (default) | Every Jellyfin user |
+| **Administrators only** | Administrators |
+| **Selected users** | Administrators and the users ticked in the list below the setting. The list shows the server's users by name; hidden Holix profile users and administrators (who always can) are not listed. User IDs are stored in the background and never typed in |
+
+The choice is only checked when a household is **created** (`POST /Holix/Household` → 403
+`household_not_allowed`). Existing households are not affected: they keep working and can still add profiles
+up to `MaxProfilesPerHousehold`. Settings from 0.5.1 are migrated at start-up: `AllowNonAdminOwners` on →
+Everyone; off with users in `AllowedOwnerUserIds` → Selected users (the same users); off with no users →
+Administrators only.
+
+### Session limit
+
+Jellyfin's per-user *Maximum number of simultaneous user sessions* (`MaxActiveSessions`, 0 = unlimited) would
+not help on its own: every profile is a separate user, so ten profiles could open ten streams. The plugin
+therefore:
+
+1. **copies the owner's limit to every profile** (and re-copies it whenever the owner's policy changes), and
+2. **limits the household as a whole**: when a profile session is opened
+   (`POST /Holix/Profiles/{id}/Session`), the owner's and all profiles' Jellyfin sessions are counted as
+   *screens*; if the owner's limit is > 0 and a new screen would exceed it, the request is refused with
+   409 `household_session_limit`.
+
+How screens are counted:
+
+- **A screen is a device.** The owner's session on a device and the profile sessions opened on it (their device
+  IDs are derived from the device's ID) count once, so switching profiles on the same TV is always allowed, and
+  re-opening a profile on the same device replaces its previous session.
+- **Every client counts**, not only Holix Play: the owner watching in Jellyfin web takes a screen too.
+- A session counts while it is **playing**, or when it was **used in the last 15 minutes** (Jellyfin keeps
+  sessions in memory long after a device goes away; idle ones do not block the household).
+- The check runs when a profile session is opened, like Jellyfin's own limit runs at sign-in. A device whose
+  profile token is still valid can come back later without opening a new session; revoke tokens with
+  `DELETE /Holix/Profiles/{id}/Session` if needed.
+- `RemoteClientBitrateLimit` is still per user (copied from the owner); with the screen limit the household's
+  total is at most *screens × bitrate limit*.
+
+### Holix Pro
+
+Holix Pro is a licence for the **Holix Play client**, sold through the app stores and checked by the client
+against the user's Holix account. **The plugin does not check it** and has no free/Pro distinction: on the
+server, households and profiles work the same for everyone. Whether the client offers profiles is the
+client's decision.
 
 Please report security issues privately to **security@holixplay.com** (or via GitHub's private vulnerability
 reporting) rather than opening a public issue.
@@ -307,7 +363,7 @@ Errors: `{"Error": "<code>", "Message": "…"}`.
 |---|---|---|
 | `GET /Holix/Info` | anonymous | `Version`, `ApiVersion` (1), `Features` (`cloud-proof`, `profile-image`, …), `CloudUrl`, `GuestBehavior`, `RatingSystems`, `DefaultRatingSystem`, `AgeRatings`, `MaxProfiles`, `RequireCloudProof`, `RequireCloudLink`. 404 → plugin not installed → single-profile mode |
 | `GET /Holix/Household` | user | Owner: household, all profiles (owner first, `IsOwner=true`) and `Cloud` link info (or `null`). Profile user: `Role="profile"` and only its own profile. 404 if none |
-| `POST /Holix/Household` | admin\* | Makes the caller a household owner (idempotent). `{RatingSystem?: "TR"\|"US"\|"DE", OwnerHolixProfileId?}` |
+| `POST /Holix/Household` | user\* | Makes the caller a household owner (idempotent). `{RatingSystem?: "TR"\|"US"\|"DE", OwnerHolixProfileId?}` |
 | `DELETE /Holix/Household?deleteProfileUsers=true` | owner | Deletes the household (by default with its profile users) |
 | `POST /Holix/Household/Link` | owner | `{Code}` from holix-cloud (`POST /v1/jellyfin/link-code`). Returns the updated household (same body as `GET /Holix/Household`). 409 `already_linked`, 409 `cloud_not_configured`, 400 `invalid_link_code` |
 | `POST /Holix/Household/Sync` | owner | Re-derives profile policies from the owner (normally automatic) |
@@ -315,7 +371,7 @@ Errors: `{"Error": "<code>", "Message": "…"}`.
 | `POST /Holix/Profiles` | owner | 201. `{Name, Kind: "adult"\|"child"\|"guest", AgeRating?, RatingSystem?, BlockedTags?, HolixProfileId?}`. `AgeRating` is required for children; default `18+` otherwise |
 | `PATCH /Holix/Profiles/{id}` | owner | Only the given fields. For the owner's own profile only `HolixProfileId` |
 | `DELETE /Holix/Profiles/{id}` | owner | Deletes the profile and its Jellyfin user (not the owner) |
-| `POST /Holix/Profiles/{id}/Session` | owner + proof | `{JellyfinProof, DeviceId?, DeviceName?, App?, AppVersion?}`. Returns `AccessToken`, `DeviceId`, `ServerId`, `Profile`, `Authentication` (same shape as `/Users/AuthenticateByName`), `ProofVerified`, `Warning` |
+| `POST /Holix/Profiles/{id}/Session` | owner + proof | `{JellyfinProof, DeviceId?, DeviceName?, App?, AppVersion?}`. Returns `AccessToken`, `DeviceId`, `ServerId`, `Profile`, `Authentication` (same shape as `/Users/AuthenticateByName`), `ProofVerified`, `Warning`. 409 `household_session_limit` when the household already uses all of the owner's screens (see [Session limit](#session-limit)) |
 | `DELETE /Holix/Profiles/{id}/Session` | owner | Revokes all Jellyfin tokens of the profile |
 | `PUT /Holix/Profiles/{id}/Image` | owner | Raw JPEG or PNG body (≤ 2 MB). Stored as the Jellyfin user image. 413 `image_too_large`, 415 `unsupported_image` |
 | `DELETE /Holix/Profiles/{id}/Image` | owner | Removes the profile's Jellyfin user image |
@@ -323,8 +379,8 @@ Errors: `{"Error": "<code>", "Message": "…"}`.
 | `GET /Holix/StreamAuth` | proxy only | forwardAuth / `auth_request` decision for stream paths: 204 / 401 / 403 / 404, empty body (see above) |
 | `POST` / `DELETE /Holix/Admin/Households/{ownerId}/Link` | admin | Link / re-link with `{Code}`; unlink |
 
-\* By default only Jellyfin administrators may create a household; see `AllowNonAdminOwners` /
-`AllowedOwnerUserIds`.
+\* Every user by default; see [Household ownership](#household-ownership). 403 `household_not_allowed` when the
+setting does not allow the caller.
 
 ### Client flow
 

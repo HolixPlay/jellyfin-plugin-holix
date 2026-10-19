@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -14,6 +14,7 @@ using Jellyfin.Plugin.Holix.Configuration;
 using Jellyfin.Plugin.Holix.Images;
 using Jellyfin.Plugin.Holix.Ratings;
 using MediaBrowser.Controller;
+using MediaBrowser.Controller.Authentication;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Session;
@@ -109,7 +110,7 @@ public sealed class HouseholdService
 
         if (m.Role == HouseholdRole.None && !CanOwn(caller))
         {
-            throw HolixException.Forbidden("To own a household you must be an administrator or be allowed in the plugin settings.");
+            throw new HolixException(403, "household_not_allowed", "Creating a household is limited on this server; ask the server administrator (Dashboard → Plugins → Holix).");
         }
 
         RatingSystem? system = null;
@@ -377,7 +378,6 @@ public sealed class HouseholdService
         ArgumentNullException.ThrowIfNull(request);
         var h = RequireOwner(caller);
         var dto = profileId == h.OwnerUserId ? OwnerDto(h) : ToDto(h, FindProfile(h, profileId));
-        var (proofVerified, warning) = await CheckProofAsync(h, profileId, request.JellyfinProof).ConfigureAwait(false);
 
         var baseDevice = EmptyToNull(request.DeviceId) ?? EmptyToNull(callerDeviceId)
             ?? throw HolixException.BadRequest("device_required", "deviceId is required (body or Authorization header).");
@@ -385,15 +385,37 @@ public sealed class HouseholdService
             ? baseDevice
             : DeriveDeviceId(baseDevice, profileId);
 
-        var result = await _sessionManager.AuthenticateDirect(new AuthenticationRequest
+        // Household-wide screen limit, checked before the proof so a refused request does not burn it.
+        var now = DateTime.UtcNow;
+        var sessions = _sessionManager.Sessions.ToList();
+        var ownerMax = _userManager.GetUserDto(caller).Policy?.MaxActiveSessions ?? 0;
+        HouseholdSessionLimit.Check(h, ownerMax, sessions.Select(Snapshot).ToList(), baseDevice, deviceId, now);
+
+        var (proofVerified, warning) = await CheckProofAsync(h, profileId, request.JellyfinProof).ConfigureAwait(false);
+
+        if (profileId != h.OwnerUserId)
         {
-            UserId = profileId,
-            DeviceId = deviceId,
-            DeviceName = EmptyToNull(request.DeviceName) ?? EmptyToNull(callerDevice) ?? "Holix Play",
-            App = EmptyToNull(request.App) ?? EmptyToNull(callerClient) ?? "Holix Play",
-            AppVersion = EmptyToNull(request.AppVersion) ?? EmptyToNull(callerVersion) ?? "0",
-            RemoteEndPoint = remoteEndPoint ?? string.Empty,
-        }).ConfigureAwait(false);
+            await EndReplaceableSessionsAsync(sessions, profileId, deviceId, now).ConfigureAwait(false);
+        }
+
+        AuthenticationResult result;
+        try
+        {
+            result = await _sessionManager.AuthenticateDirect(new AuthenticationRequest
+            {
+                UserId = profileId,
+                DeviceId = deviceId,
+                DeviceName = EmptyToNull(request.DeviceName) ?? EmptyToNull(callerDevice) ?? "Holix Play",
+                App = EmptyToNull(request.App) ?? EmptyToNull(callerClient) ?? "Holix Play",
+                AppVersion = EmptyToNull(request.AppVersion) ?? EmptyToNull(callerVersion) ?? "0",
+                RemoteEndPoint = remoteEndPoint ?? string.Empty,
+            }).ConfigureAwait(false);
+        }
+        catch (SecurityException ex)
+        {
+            // Jellyfin's own per-user limit (the profile copies the owner's MaxActiveSessions) or device access.
+            throw HolixException.Conflict(HouseholdSessionLimit.ErrorCode, "Jellyfin refused the session: " + ex.Message);
+        }
 
         _logger.LogInformation("Holix: {Owner} opened a session for profile {Profile} (cloud proof: {Verified})", caller.Username, dto.UserName, proofVerified);
         return new ProfileSessionDto
@@ -772,6 +794,33 @@ public sealed class HouseholdService
         }
     }
 
+    private static SessionSnapshot Snapshot(SessionInfo s) =>
+        new(s.UserId, s.DeviceId, s.LastActivityDate, s.NowPlayingItem is not null);
+
+    /// <summary>
+    /// Ends (in memory only; tokens stay valid) the profile's sessions that the new one replaces: the one on the same
+    /// device, and idle ones that the household limit no longer counts. Otherwise Jellyfin's per-user
+    /// <c>MaxActiveSessions</c> check, which counts every session in memory, would refuse re-opening a profile on
+    /// the same TV. A client that comes back with its old token simply gets a new session.
+    /// </summary>
+    private async Task EndReplaceableSessionsAsync(IEnumerable<SessionInfo> sessions, Guid profileId, string deviceId, DateTime now)
+    {
+        foreach (var s in sessions.Where(s => s.UserId == profileId
+            && (string.Equals(s.DeviceId, deviceId, StringComparison.Ordinal) || !HouseholdSessionLimit.IsActive(Snapshot(s), now))))
+        {
+            try
+            {
+                await _sessionManager.ReportSessionEnded(s.Id).ConfigureAwait(false);
+            }
+#pragma warning disable CA1031
+            catch (Exception ex)
+#pragma warning restore CA1031
+            {
+                _logger.LogWarning(ex, "Holix: could not end session {SessionId} of profile {Profile}", s.Id, profileId);
+            }
+        }
+    }
+
     internal static string DeriveDeviceId(string baseDeviceId, Guid profileId)
     {
         // Give each profile on the same device its own Jellyfin device/session record: when Jellyfin issues a
@@ -869,18 +918,8 @@ public sealed class HouseholdService
         },
     };
 
-    private bool CanOwn(User caller)
-    {
-        var policy = _userManager.GetUserDto(caller).Policy;
-        if (policy?.IsAdministrator == true || Config.AllowNonAdminOwners)
-        {
-            return true;
-        }
-
-        var id = caller.Id.ToString("N", CultureInfo.InvariantCulture);
-        return Config.AllowedOwnerUserIds.Any(x => Guid.TryParse(x, out var g) && g == caller.Id)
-            || Config.AllowedOwnerUserIds.Contains(id, StringComparer.OrdinalIgnoreCase);
-    }
+    private bool CanOwn(User caller) =>
+        OwnerAccess.CanCreateHousehold(Config, caller.Id, _userManager.GetUserDto(caller).Policy?.IsAdministrator == true);
 
     private static Household RequireOwner(User caller)
     {

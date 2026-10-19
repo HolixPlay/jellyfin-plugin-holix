@@ -34,6 +34,12 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         // so the household mapping lives in the configurations directory, which survives updates.
         _households = new Lazy<HouseholdStore>(() => new HouseholdStore(
             Path.Combine(applicationPaths.PluginConfigurationsPath, "Jellyfin.Plugin.Holix", "households.json")));
+
+        // 0.5.1 → 0.5.2: AllowNonAdminOwners / AllowedOwnerUserIds → HouseholdOwners.
+        if (OwnerAccess.Migrate(Configuration))
+        {
+            SaveConfiguration();
+        }
     }
 
     /// <summary>Gets the current plugin instance.</summary>

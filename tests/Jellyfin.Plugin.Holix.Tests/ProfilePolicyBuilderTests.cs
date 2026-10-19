@@ -124,6 +124,21 @@ public class ProfilePolicyBuilderTests
     }
 
     [Theory]
+    [InlineData(0, 0)]
+    [InlineData(2, 2)]
+    [InlineData(-1, 0)]
+    public void Profiles_get_the_owner_session_limit(int ownerMax, int expected)
+    {
+        var owner = Owner();
+        owner.MaxActiveSessions = ownerMax;
+        foreach (var kind in new[] { ProfileKind.Adult, ProfileKind.Child, ProfileKind.Guest })
+        {
+            var p = ProfilePolicyBuilder.Build(owner, Fresh(), Profile(kind, AgeRating.Age13), RatingSystem.TR, [], true);
+            Assert.Equal(expected, p.MaxActiveSessions);
+        }
+    }
+
+    [Theory]
     [InlineData(null, null, 13, 0, 13, 0)]
     [InlineData(13, 1, null, null, 13, 1)]
     [InlineData(13, 1, 13, 0, 13, 0)]

@@ -105,7 +105,10 @@ public static class ProfilePolicyBuilder
             EnableContentDownloading = !isGuest && !isChild && owner.EnableContentDownloading,
             EnableSyncTranscoding = owner.EnableSyncTranscoding,
             EnableMediaConversion = owner.EnableMediaConversion,
-            MaxActiveSessions = 0,
+
+            // Same screen limit as the owner (0 = unlimited). The household-wide limit (owner + all profiles
+            // together) is enforced when a profile session is opened, see HouseholdSessionLimit.
+            MaxActiveSessions = Math.Max(0, owner.MaxActiveSessions),
 
             // Management permissions are disabled for profiles.
             EnableContentDeletion = false,

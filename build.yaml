@@ -1,7 +1,7 @@
 # jprm (Jellyfin Plugin Repository Manager) format; scripts/package.sh uses the same values.
 name: "Holix"
 guid: "06f19487-387d-4e2f-be1d-71f44efff069"
-version: "0.5.1.0"
+version: "0.5.2.0"
 targetAbi: "12.2.0.0"
 framework: "net10.0"
 overview: "Holix Play: household/profile mapping, profile sessions, no watch history for guests"
@@ -15,6 +15,10 @@ artifacts:
 - "Jellyfin.Plugin.Holix.dll"
 - "BouncyCastle.Cryptography.dll"
 changelog: >
+  0.5.2.0: household-wide session limit — profiles copy the owner's MaxActiveSessions, and the owner plus all
+  profiles together may watch on at most that many screens (409 household_session_limit); "Who can create a
+  household" setting (Everyone / Administrators only / Selected users, picked by name) replaces the
+  AllowNonAdminOwners / AllowedOwnerUserIds settings, which are migrated automatically.
   0.5.1.0: removed the ClipsUrl setting; preview clips now use Jellyfin's standard theme videos (backdrops
   folder).
   0.5.0.0: new ClipsUrl setting — the holix-clips preview clip service address is announced to clients as

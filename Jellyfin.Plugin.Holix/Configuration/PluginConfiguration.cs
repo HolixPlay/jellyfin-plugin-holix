@@ -15,6 +15,20 @@ public enum GuestBehavior
     KeepPlaystate = 2,
 }
 
+/// <summary>Who may create a household (become a household owner).</summary>
+public enum HouseholdOwnerMode
+{
+    /// <summary>Every Jellyfin user (default). Profiles never get more rights than their owner, and the owner's
+    /// session limit covers the whole household.</summary>
+    Everyone = 0,
+
+    /// <summary>Only administrators.</summary>
+    AdminsOnly = 1,
+
+    /// <summary>Administrators and the users chosen on the settings page (<see cref="PluginConfiguration.AllowedOwnerUserIds"/>).</summary>
+    SelectedUsers = 2,
+}
+
 /// <summary>
 /// Plugin settings (Dashboard → Plugins → Holix). Household/profile data is NOT stored here but in
 /// <c>households.json</c> in the plugin configuration directory, so saving the settings page never
@@ -49,13 +63,22 @@ public class PluginConfiguration : BasePluginConfiguration
     public string DefaultRatingSystem { get; set; } = "TR";
 
     /// <summary>
-    /// Gets or sets a value indicating whether non-administrator Jellyfin users may create a household.
-    /// When off (default) only administrators or users in <see cref="AllowedOwnerUserIds"/> can own a
-    /// household, because a household owner can create new users on the server.
+    /// Gets or sets who may create a household (Dashboard → Plugins → Holix → "Who can create a household").
+    /// Default <see cref="HouseholdOwnerMode.Everyone"/>. Changing it never affects existing households.
     /// </summary>
-    public bool AllowNonAdminOwners { get; set; }
+    public HouseholdOwnerMode HouseholdOwners { get; set; } = HouseholdOwnerMode.Everyone;
 
-    /// <summary>Gets or sets the explicitly allowed owner user ids (for non-administrators).</summary>
+    /// <summary>
+    /// Gets or sets a value indicating whether non-administrators may create a household. Up to 0.5.1 only; kept so
+    /// an old settings file can be migrated to <see cref="HouseholdOwners"/> (see <see cref="Households.OwnerAccess.Migrate"/>),
+    /// <c>null</c> afterwards and then no longer written.
+    /// </summary>
+    public bool? AllowNonAdminOwners { get; set; }
+
+    /// <summary>
+    /// Gets or sets the users allowed to create a household in <see cref="HouseholdOwnerMode.SelectedUsers"/> mode
+    /// (Jellyfin user ids; the settings page manages them as a list of names).
+    /// </summary>
 #pragma warning disable CA1819 // XML serialization requires arrays.
     public string[] AllowedOwnerUserIds { get; set; } = [];
 
@@ -75,4 +98,8 @@ public class PluginConfiguration : BasePluginConfiguration
 
     /// <summary>Gets or sets a value indicating whether child profiles hide unrated items.</summary>
     public bool BlockUnratedForChildren { get; set; } = true;
+
+    /// <summary>XmlSerializer: the legacy <see cref="AllowNonAdminOwners"/> element is written only until it is migrated.</summary>
+    /// <returns>Whether to write it.</returns>
+    public bool ShouldSerializeAllowNonAdminOwners() => AllowNonAdminOwners.HasValue;
 }

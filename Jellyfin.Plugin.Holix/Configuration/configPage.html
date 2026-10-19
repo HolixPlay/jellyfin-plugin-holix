@@ -49,6 +49,7 @@
                     <div class="inputContainer">
                         <label class="inputLabel inputLabelUnfocused" for="MaxProfilesPerHousehold" data-i18n="maxProfiles">Maximum profiles per household (including the owner)</label>
                         <input id="MaxProfilesPerHousehold" name="MaxProfilesPerHousehold" type="number" is="emby-input" min="1" max="50" />
+                        <div class="fieldDescription" data-i18n="maxProfilesDesc">Each profile is a hidden Jellyfin user. However many profiles a household has, together they can watch on at most as many screens as the owner's own limit (Dashboard → Users → owner → "Maximum number of simultaneous user sessions").</div>
                     </div>
                     <div class="checkboxContainer checkboxContainer-withDescription">
                         <label class="emby-checkbox-label">
@@ -60,16 +61,18 @@
                         <label class="inputLabel inputLabelUnfocused" for="DefaultChildBlockedTags" data-i18n="childTags">Blocked tags for children (comma-separated)</label>
                         <input id="DefaultChildBlockedTags" type="text" is="emby-input" />
                     </div>
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label class="emby-checkbox-label">
-                            <input id="AllowNonAdminOwners" type="checkbox" is="emby-checkbox" />
-                            <span data-i18n="allowNonAdmin">Allow non-administrator users to create households</span>
-                        </label>
-                        <div class="fieldDescription checkboxFieldDescription" data-i18n="allowNonAdminDesc">A household owner can create (hidden, unprivileged) users on the server. When off, only administrators and the users listed below can.</div>
+                    <div class="selectContainer">
+                        <label class="selectLabel" for="HouseholdOwners" data-i18n="owners">Who can create a household</label>
+                        <select is="emby-select" id="HouseholdOwners" name="HouseholdOwners" class="emby-select-withcolor emby-select">
+                            <option value="Everyone" data-i18n="ownersEveryone">Everyone (recommended)</option>
+                            <option value="AdminsOnly" data-i18n="ownersAdmins">Administrators only</option>
+                            <option value="SelectedUsers" data-i18n="ownersSelected">Selected users</option>
+                        </select>
+                        <div class="fieldDescription" data-i18n="ownersDesc">Profiles never get more rights than their owner, and the owner's session limit covers the whole household. Administrators can always create a household. Changing this only affects new households; existing ones keep working.</div>
                     </div>
-                    <div class="inputContainer">
-                        <label class="inputLabel inputLabelUnfocused" for="AllowedOwnerUserIds" data-i18n="allowedOwners">User ids allowed to create households (comma-separated)</label>
-                        <input id="AllowedOwnerUserIds" type="text" is="emby-input" />
+                    <div id="HolixOwnerPicker" style="display:none; margin-bottom:1.8em">
+                        <div class="fieldDescription" id="HolixOwnerListNote" style="margin-bottom:0.6em"></div>
+                        <div id="HolixOwnerList"></div>
                     </div>
                     <div class="inputContainer">
                         <label class="inputLabel inputLabelUnfocused" for="StreamAuthAllowedProxies" data-i18n="streamAuthProxies">Reverse proxies allowed to call /Holix/StreamAuth (CIDR, comma-separated)</label>
@@ -111,9 +114,16 @@
                         maxProfiles: 'Maximum profiles per household (including the owner)',
                         blockUnrated: 'Hide unrated content on child profiles',
                         childTags: 'Blocked tags for children (comma-separated)',
-                        allowNonAdmin: 'Allow non-administrator users to create households',
-                        allowNonAdminDesc: 'A household owner can create (hidden, unprivileged) users on the server. When off, only administrators and the users listed below can.',
-                        allowedOwners: 'User ids allowed to create households (comma-separated)',
+                        maxProfilesDesc: 'Each profile is a hidden Jellyfin user. However many profiles a household has, together they can watch on at most as many screens as the owner\'s own limit (Dashboard → Users → owner → "Maximum number of simultaneous user sessions").',
+                        owners: 'Who can create a household',
+                        ownersEveryone: 'Everyone (recommended)',
+                        ownersAdmins: 'Administrators only',
+                        ownersSelected: 'Selected users',
+                        ownersDesc: 'Profiles never get more rights than their owner, and the owner\'s session limit covers the whole household. Administrators can always create a household. Changing this only affects new households; existing ones keep working.',
+                        ownersNone: 'There are no other users on this server yet.',
+                        ownersLoadFailed: 'Could not load the user list; the current selection is kept.',
+                        ownersPickNote: 'Choose who may create their own household. Administrators always can, so they are not listed.',
+                        ownerHasHousehold: 'has a household',
                         streamAuthProxies: 'Reverse proxies allowed to call /Holix/StreamAuth (CIDR, comma-separated)',
                         streamAuthProxiesDesc: 'Empty: loopback and private networks only. Requests from other addresses get 404.',
                         save: 'Save',
@@ -150,9 +160,16 @@
                         maxProfiles: 'Hane başına en çok profil (sahip dahil)',
                         blockUnrated: 'Çocuk profillerde derecesiz içeriği gizle',
                         childTags: 'Çocuklar için engelli etiketler (virgülle)',
-                        allowNonAdmin: 'Yönetici olmayan kullanıcılar hane açabilsin',
-                        allowNonAdminDesc: 'Hane sahibi sunucuda (gizli, yetkisiz) kullanıcı açabilir. Kapalıyken yalnız yöneticiler ve aşağıdaki listedekiler.',
-                        allowedOwners: 'Hane açabilecek kullanıcı kimlikleri (virgülle)',
+                        maxProfilesDesc: 'Her profil gizli bir Jellyfin kullanıcısıdır. Hanede kaç profil olursa olsun, hepsi birlikte en çok sahibin kendi sınırı kadar ekranda izleyebilir (Pano → Kullanıcılar → sahip → "Eşzamanlı en fazla kullanıcı oturumu").',
+                        owners: 'Hane açabilecekler',
+                        ownersEveryone: 'Herkes (önerilen)',
+                        ownersAdmins: 'Yalnız yöneticiler',
+                        ownersSelected: 'Seçilen kullanıcılar',
+                        ownersDesc: 'Profiller sahibinden fazla yetki alamaz; sahibin oturum sınırı tüm haneyi kapsar. Yöneticiler her zaman hane açabilir. Bu seçim yalnız yeni açılacak haneleri etkiler; mevcut haneler olduğu gibi çalışmaya devam eder.',
+                        ownersNone: 'Bu sunucuda henüz başka kullanıcı yok.',
+                        ownersLoadFailed: 'Kullanıcı listesi alınamadı; mevcut seçim korunuyor.',
+                        ownersPickNote: 'Kendi hanesini açabilecek kişileri buradan seçebilirsiniz. Yöneticiler her zaman açabildiği için listede yer almaz.',
+                        ownerHasHousehold: 'hanesi var',
                         streamAuthProxies: '/Holix/StreamAuth\'u çağırabilecek ters vekiller (CIDR, virgülle)',
                         streamAuthProxiesDesc: 'Boş: yalnız loopback ve özel ağlar. Diğer adreslerden gelen istekler 404 alır.',
                         save: 'Kaydet',
@@ -272,12 +289,94 @@
                 }
 
                 function loadHouseholds() {
-                    ApiClient.getJSON(ApiClient.getUrl('Holix/Admin/Households')).then(renderHouseholds, function () {
+                    return ApiClient.getJSON(ApiClient.getUrl('Holix/Admin/Households')).then(function (list) {
+                        renderHouseholds(list);
+                        return list || [];
+                    }, function () {
                         page.querySelector('#HolixHouseholds').textContent = t('loadFailed');
+                        return null;
+                    });
+                }
+
+                // "Who can create a household": the selection is kept as user ids in the settings, but the
+                // administrator only ever sees names. Selected ids (lowercase, no dashes) → true.
+                var selectedOwners = {};
+                var ownerListReady = false;
+
+                function normId(id) {
+                    return String(id || '').replace(/-/g, '').toLowerCase();
+                }
+
+                function ownerModeOf(config) {
+                    // A 0.5.1 settings file not migrated yet (the plugin migrates it at start-up).
+                    if (config.AllowNonAdminOwners === true) {
+                        return 'Everyone';
+                    }
+                    if (config.AllowNonAdminOwners === false) {
+                        return (config.AllowedOwnerUserIds || []).length ? 'SelectedUsers' : 'AdminsOnly';
+                    }
+                    return config.HouseholdOwners || 'Everyone';
+                }
+
+                function updateOwnerPicker() {
+                    page.querySelector('#HolixOwnerPicker').style.display =
+                        page.querySelector('#HouseholdOwners').value === 'SelectedUsers' ? '' : 'none';
+                }
+
+                function renderOwnerList(users, households) {
+                    var root = page.querySelector('#HolixOwnerList');
+                    var note = page.querySelector('#HolixOwnerListNote');
+                    root.textContent = '';
+                    if (!users || !households) {
+                        ownerListReady = false;
+                        note.textContent = t('ownersLoadFailed');
+                        return;
+                    }
+                    var profileIds = {};
+                    var ownerIds = {};
+                    households.forEach(function (h) {
+                        ownerIds[normId(h.OwnerUserId)] = true;
+                        (h.Profiles || []).forEach(function (p) {
+                            if (!p.IsOwner) {
+                                profileIds[normId(p.Id)] = true;
+                            }
+                        });
+                    });
+                    // Hidden Holix profile users and administrators (who always can) are not listed.
+                    var list = users.filter(function (u) {
+                        return !profileIds[normId(u.Id)] && !(u.Policy && u.Policy.IsAdministrator);
+                    }).sort(function (a, b) {
+                        return String(a.Name).localeCompare(String(b.Name));
+                    });
+                    list.forEach(function (u) {
+                        var id = normId(u.Id);
+                        // Parsed from markup so Jellyfin's emby-checkbox element is upgraded (also in Safari);
+                        // the id is hex only, the name goes in as text.
+                        var row = document.createElement('div');
+                        row.className = 'checkboxContainer';
+                        var label = document.createElement('label');
+                        label.className = 'emby-checkbox-label';
+                        label.innerHTML = '<input type="checkbox" is="emby-checkbox" class="holixOwnerCheck" data-user-id="' + id.replace(/[^0-9a-f]/g, '') + '" /><span></span>';
+                        label.querySelector('input').checked = selectedOwners[id] === true;
+                        label.querySelector('span').textContent = u.Name + (ownerIds[id] ? ' · ' + t('ownerHasHousehold') : '');
+                        row.appendChild(label);
+                        root.appendChild(row);
+                    });
+                    note.textContent = list.length ? t('ownersPickNote') : t('ownersNone');
+                    ownerListReady = true;
+                }
+
+                function loadOwnerCandidates() {
+                    Promise.all([
+                        ApiClient.getUsers().then(null, function () { return null; }),
+                        loadHouseholds()
+                    ]).then(function (r) {
+                        renderOwnerList(r[0], r[1]);
                     });
                 }
 
                 applyTranslations();
+                page.querySelector('#HouseholdOwners').addEventListener('change', updateOwnerPicker);
 
                 page.addEventListener('pageshow', function () {
                     Dashboard.showLoadingMsg();
@@ -290,12 +389,14 @@
                         page.querySelector('#MaxProfilesPerHousehold').value = config.MaxProfilesPerHousehold || 10;
                         page.querySelector('#BlockUnratedForChildren').checked = config.BlockUnratedForChildren;
                         page.querySelector('#DefaultChildBlockedTags').value = (config.DefaultChildBlockedTags || []).join(', ');
-                        page.querySelector('#AllowNonAdminOwners').checked = config.AllowNonAdminOwners;
-                        page.querySelector('#AllowedOwnerUserIds').value = (config.AllowedOwnerUserIds || []).join(', ');
+                        page.querySelector('#HouseholdOwners').value = ownerModeOf(config);
+                        selectedOwners = {};
+                        (config.AllowedOwnerUserIds || []).forEach(function (id) { selectedOwners[normId(id)] = true; });
+                        updateOwnerPicker();
                         page.querySelector('#StreamAuthAllowedProxies').value = (config.StreamAuthAllowedProxies || []).join(', ');
                         Dashboard.hideLoadingMsg();
+                        loadOwnerCandidates();
                     });
-                    loadHouseholds();
                 });
 
                 page.querySelector('#HolixConfigForm').addEventListener('submit', function (e) {
@@ -309,8 +410,13 @@
                         config.MaxProfilesPerHousehold = parseInt(page.querySelector('#MaxProfilesPerHousehold').value, 10) || 10;
                         config.BlockUnratedForChildren = page.querySelector('#BlockUnratedForChildren').checked;
                         config.DefaultChildBlockedTags = splitList(page.querySelector('#DefaultChildBlockedTags').value);
-                        config.AllowNonAdminOwners = page.querySelector('#AllowNonAdminOwners').checked;
-                        config.AllowedOwnerUserIds = splitList(page.querySelector('#AllowedOwnerUserIds').value);
+                        config.HouseholdOwners = page.querySelector('#HouseholdOwners').value;
+                        config.AllowNonAdminOwners = null;
+                        if (ownerListReady) {
+                            config.AllowedOwnerUserIds = Array.prototype.map.call(
+                                page.querySelectorAll('.holixOwnerCheck:checked'),
+                                function (el) { return el.getAttribute('data-user-id'); });
+                        }
                         config.StreamAuthAllowedProxies = splitList(page.querySelector('#StreamAuthAllowedProxies').value);
                         ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
