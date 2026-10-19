@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/HolixPlay/jellyfin-plugin-holix/main/assets/logo.png",
     "versions": [
       {
+        "version": "0.5.2.0",
+        "changelog": "- **Household-wide session limit.** Profiles now copy the owner's *Maximum number of simultaneous user sessions* (`MaxActiveSessions`; before, profiles were unlimited). On top of that the owner and all profiles together may use at most that many screens: `POST /Holix/Profiles/{id}/Session` returns 409 `household_session_limit` when a new screen would exceed it. A screen is a device: the owner's session on a TV and the profile sessions opened on that TV count once, so switching profiles on the same device is always allowed. Sessions from every client count (Jellyfin web too) when they are playing or were used in the last 15 minutes. 0 (Jellyfin's default) keeps everything unlimited. Changing the owner's limit in the dashboard is propagated to the profiles; existing profiles are updated at start-up. New feature flag `household-session-limit` in `/Holix/Info`. - Re-opening a profile on the same device ends that profile's previous (and idle) sessions first, so Jellyfin's per-user limit does not refuse it. - **\"Who can create a household\"** setting with three choices: *Everyone* (default for new installs), *Administrators only*, *Selected users* — chosen from a list of the server's user names (hidden profile users and administrators are not listed). User IDs are no longer typed in. The 0.5.1 settings are migrated at start-up: `AllowNonAdminOwners` on → Everyone; off with users listed → Selected users (same users); off with no users → Administrators only (unchanged behaviour). The mode only affects creating new households; existing households keep working. Refusals now use the error code `household_not_allowed` (403). - README: Holix Pro is a client licence; the plugin does not check it.",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HolixPlay/jellyfin-plugin-holix/releases/download/v0.5.2/holix_0.5.2.0.zip",
+        "checksum": "de383753606a2c33b6d35f036f002765",
+        "timestamp": "2026-10-19T15:15:22Z"
+      },
+      {
         "version": "0.5.1.0",
         "changelog": "- Removed the ClipsUrl setting; preview clips now use Jellyfin's standard theme videos (backdrops folder).",
         "targetAbi": "12.2.0.0",
