@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/HolixPlay/jellyfin-plugin-holix/main/assets/logo.png",
     "versions": [
       {
+        "version": "0.5.1.0",
+        "changelog": "- Removed the ClipsUrl setting; preview clips now use Jellyfin's standard theme videos (backdrops folder).",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/HolixPlay/jellyfin-plugin-holix/releases/download/v0.5.1/holix_0.5.1.0.zip",
+        "checksum": "5766899185067e9dbed0284ee8a9b19f",
+        "timestamp": "2026-10-19T06:42:41Z"
+      },
+      {
         "version": "0.5.0.0",
         "changelog": "- New `ClipsUrl` setting (Dashboard → Plugins → Holix): the address of the holix-clips service that makes short background preview clips for this server. It is announced to clients as `ClipsUrl` in `/Holix/Info`, so it no longer has to be typed into every client. Left out of the response when empty or not an absolute http(s) URL; a trailing `/` is removed. The plugin never contacts this URL. New feature flag `clips-url`.",
         "targetAbi": "12.2.0.0",
