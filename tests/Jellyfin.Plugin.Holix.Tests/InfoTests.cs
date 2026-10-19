@@ -16,6 +16,7 @@ public class InfoTests
         var info = HolixController.BuildInfo(new PluginConfiguration(), new Version(0, 5, 1, 0));
         Assert.DoesNotContain("clips-url", info.Features);
         Assert.Contains("household-session-limit", info.Features);
+        Assert.Contains("cloud-session", info.Features);
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(info));
         Assert.False(doc.RootElement.TryGetProperty("ClipsUrl", out _));
         Assert.Equal("https://api.holixplay.com", doc.RootElement.GetProperty("CloudUrl").GetString());

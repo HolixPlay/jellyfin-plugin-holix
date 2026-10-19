@@ -120,7 +120,17 @@ public static class CloudProofVerifier
     /// <param name="token">The proof.</param>
     /// <param name="link">The link holding the keys.</param>
     /// <returns>The claims.</returns>
-    public static ProofClaims VerifySignature(string? token, CloudLink link)
+    public static ProofClaims VerifySignature(string? token, CloudLink link) =>
+        VerifySignature<ProofClaims>(token, link, TokenType);
+
+    /// <summary>Checks the format, the pinned <c>alg</c>/<c>typ</c> and the signature, and decodes the claims.</summary>
+    /// <typeparam name="T">The claims type.</typeparam>
+    /// <param name="token">The JWS.</param>
+    /// <param name="link">The link holding the keys.</param>
+    /// <param name="tokenType">The required <c>typ</c> header (proof kinds cannot stand in for each other).</param>
+    /// <returns>The claims.</returns>
+    internal static T VerifySignature<T>(string? token, CloudLink link, string tokenType)
+        where T : class
     {
         ArgumentNullException.ThrowIfNull(link);
         if (string.IsNullOrWhiteSpace(token) || token.Length > MaxTokenLength)
@@ -146,11 +156,11 @@ public static class CloudProofVerifier
 
         // alg is pinned: "none", HS256 etc. are never accepted. crit means an unknown extension.
         if (!string.Equals(header.Alg, "EdDSA", StringComparison.Ordinal)
-            || !string.Equals(header.Typ, TokenType, StringComparison.Ordinal)
+            || !string.Equals(header.Typ, tokenType, StringComparison.Ordinal)
             || header.Crit is not null
             || string.IsNullOrEmpty(header.Kid))
         {
-            throw Invalid("Unexpected proof header (expected alg EdDSA, typ " + TokenType + ").");
+            throw Invalid("Unexpected proof header (expected alg EdDSA, typ " + tokenType + ").");
         }
 
         var key = link.Keys.FirstOrDefault(k => string.Equals(k.Kid, header.Kid, StringComparison.Ordinal))
@@ -175,7 +185,7 @@ public static class CloudProofVerifier
 
         try
         {
-            return JsonSerializer.Deserialize<ProofClaims>(Base64Url.Decode(parts[1])) ?? throw Invalid("The payload is empty.");
+            return JsonSerializer.Deserialize<T>(Base64Url.Decode(parts[1])) ?? throw Invalid("The payload is empty.");
         }
         catch (Exception ex) when (ex is JsonException or FormatException)
         {
@@ -271,9 +281,9 @@ public static class CloudProofVerifier
         }
     }
 
-    private static HolixException Invalid(string message) => Fail("invalid_proof", message);
+    internal static HolixException Invalid(string message) => Fail("invalid_proof", message);
 
-    private static HolixException Fail(string code, string message) => new(403, code, message);
+    internal static HolixException Fail(string code, string message) => new(403, code, message);
 
     private sealed class Header
     {

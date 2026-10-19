@@ -42,6 +42,7 @@ public sealed class HolixController : ControllerBase
         "stream-auth",
         "tr-rating-aliases",
         "household-session-limit",
+        "cloud-session",
     ];
 
     private readonly HouseholdService _service;
@@ -131,6 +132,25 @@ public sealed class HolixController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public Task<ActionResult<HouseholdDto>> LinkHousehold([FromBody] LinkRequest request) =>
         Run(caller => _service.LinkCloudAsync(caller, request));
+
+    /// <summary>
+    /// Account-first sign-in: a device signed in to the household's Holix account opens the owner's (or a profile's)
+    /// session with a holix-cloud session proof, without the Jellyfin password. No Jellyfin token needed: the proof
+    /// (≤ 60 s, single use, bound to this server and the device) is the credential.
+    /// </summary>
+    /// <param name="request">Body: <c>{Proof, DeviceId, DeviceName?, App?, AppVersion?, ProfileId?, ProfileProof?}</c>.</param>
+    /// <returns>The session (with the household and its profiles).</returns>
+    [HttpPost("Household/CloudSession")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<ActionResult<ProfileSessionDto>> OpenCloudSession([FromBody] CloudSessionRequest request)
+    {
+        var remote = HttpContext.GetNormalizedRemoteIP().ToString();
+        return Guard(() => _service.OpenCloudSessionAsync(request, remote));
+    }
 
     /// <summary>Manually re-syncs profiles after the owner's policy changed (normally automatic).</summary>
     /// <returns>204.</returns>

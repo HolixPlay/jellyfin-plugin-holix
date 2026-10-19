@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.3
+
+- **Account-first sign-in.** New `POST /Holix/Household/CloudSession` (no Jellyfin token): a device signed in to
+  the household's Holix account sends a session proof from holix-cloud (`POST /v1/servers/{id}/session-proof`)
+  and gets the household owner's Jellyfin session — no Jellyfin password on the household's other devices. The
+  proof is an Ed25519 JWS (`typ: holix-jellyfin-session+jwt`, same holix-cloud keys as the profile proof), lives
+  at most 60 s, is single use and is bound to the household, this server and the device ID. Only households the
+  owner linked to holix-cloud with their own token accept it. With `ProfileId` (+ the PIN proof `ProfileProof`)
+  a profile session is opened instead, with exactly the rules of `POST /Holix/Profiles/{id}/Session`. The
+  response also carries the household and its profiles. The household screen limit is checked before the proof
+  is consumed.
+- New setting **Allow sign-in with the Holix account** (`AllowCloudSessions`, default on); new feature flag
+  `cloud-session` in `/Holix/Info`.
+
 ## 0.5.2
 
 - **Household-wide session limit.** Profiles now copy the owner's *Maximum number of simultaneous user

@@ -28,6 +28,9 @@ profile).
   token for a profile. Profiles have no usable password. In a household linked to holix-cloud the request must
   carry a short-lived (≤ 60 s), single-use proof that holix-cloud signs (Ed25519) only after the profile PIN was
   verified — so a PIN cannot be bypassed by calling the server directly.
+- **Sign in with the Holix account.** The person who sets up the household adds the server once; the household's
+  other devices only sign in to their Holix account and get the owner's session from a short-lived proof signed
+  by holix-cloud — no Jellyfin password on every TV (`POST /Holix/Household/CloudSession`).
 - **Guest profiles keep no history.** Playback position, played state, play count and last-played date are
   discarded for guest profiles (optionally favourites/likes/ratings too).
 - **Household-wide session limit.** Profiles copy the owner's simultaneous-session limit, and the owner plus
@@ -104,6 +107,7 @@ lost, the profile users stay in Jellyfin but the mapping is gone.
 | `CloudUrl` | `https://api.holixplay.com` | holix-cloud base URL (https; http only for localhost). Announced to clients in `/Holix/Info`; the plugin only ever contacts this URL (link code + public keys) |
 | `RequireCloudProof` | **on** | In a cloud-linked household, profile sessions require a holix-cloud proof; cloud profile mappings are locked |
 | `RequireCloudLink` | off | When on, households that are not linked to holix-cloud cannot open profile sessions at all |
+| `AllowCloudSessions` | **on** | Devices signed in to a linked household's Holix account may open the owner's session with a holix-cloud session proof (`POST /Holix/Household/CloudSession`), without the Jellyfin password. Profile PIN rules still apply |
 | `GuestBehavior` | `DiscardPlaystate` | `DiscardAllUserData` (also favourites/ratings) or `KeepPlaystate` (protection off) |
 | `DefaultRatingSystem` | `TR` | Rating system for new households (`TR`, `US`, `DE`) |
 | `MaxProfilesPerHousehold` | 10 | Including the owner |
@@ -158,6 +162,16 @@ lost, the profile users stay in Jellyfin but the mapping is gone.
   | `jti` not used before (consumed only after every other check passed) | `proof_replayed` |
   | Profile has no `HolixProfileId` | `profile_not_mapped` |
 
+- **Sign-in with the Holix account (session proof).** `POST /Holix/Household/CloudSession` accepts a second proof
+  type, `typ: holix-jellyfin-session+jwt` (same keys; a profile proof cannot stand in for it or the other way
+  round). It replaces the owner's password on the household's other devices, so the **Holix account becomes a
+  key to the household** — only for households the owner linked to holix-cloud with their own token. Checks:
+  signature and `kid` as above, `aud`, `iss`, lifetime ≤ 60 s, `hid` = a household linked on this server (the
+  most recently linked one if several), `jf_sid` = this server, `device_id` = the request's `DeviceId`
+  (`proof_wrong_device`), `jti` single use (consumed after the household screen limit check). The owner must
+  not be disabled (`owner_disabled`). A profile still needs its PIN proof (`ProfileProof`). Administrators can
+  turn it off (`AllowCloudSessions`, 403 `cloud_session_disabled`); unlinking the household on holix-cloud stops
+  new proofs. Tokens issued this way are ordinary Jellyfin device tokens (Dashboard → Devices to revoke).
 - **Mapping lock.** Proofs rely on the `pid` ↔ `HolixProfileId` mapping. In a linked household (with proofs
   required) a non-empty mapping cannot be changed or cleared (409 `mapping_locked`), and a cloud profile can be
   mapped to only one profile (409 `mapping_in_use`); otherwise someone holding the owner token could map a
@@ -366,6 +380,7 @@ Errors: `{"Error": "<code>", "Message": "…"}`.
 | `POST /Holix/Household` | user\* | Makes the caller a household owner (idempotent). `{RatingSystem?: "TR"\|"US"\|"DE", OwnerHolixProfileId?}` |
 | `DELETE /Holix/Household?deleteProfileUsers=true` | owner | Deletes the household (by default with its profile users) |
 | `POST /Holix/Household/Link` | owner | `{Code}` from holix-cloud (`POST /v1/jellyfin/link-code`). Returns the updated household (same body as `GET /Holix/Household`). 409 `already_linked`, 409 `cloud_not_configured`, 400 `invalid_link_code` |
+| `POST /Holix/Household/CloudSession` | anonymous + session proof | Account-first sign-in. `{Proof, DeviceId, DeviceName?, App?, AppVersion?, ProfileId?, ProfileProof?}`; `Proof` from holix-cloud `POST /v1/servers/{id}/session-proof {device_id}` with the same `DeviceId`. Without `ProfileId`: the owner's session (`DeviceId` used as is); with a profile's `ProfileId`: that profile's session (rules and errors of `…/Profiles/{id}/Session`, `ProfileProof` = its `jellyfin_proof`). Returns the `…/Session` body plus `Household` (as `GET /Holix/Household`). 400 `device_required`/`proof_required`, 403 proof errors (incl. `proof_wrong_device`, `proof_replayed`), 403 `cloud_session_disabled`, 403 `owner_disabled`, 404 `household_not_linked`, 409 `household_session_limit` |
 | `POST /Holix/Household/Sync` | owner | Re-derives profile policies from the owner (normally automatic) |
 | `GET /Holix/Profiles`, `GET /Holix/Profiles/{id}` | owner | Profiles (`id` = Jellyfin user ID) |
 | `POST /Holix/Profiles` | owner | 201. `{Name, Kind: "adult"\|"child"\|"guest", AgeRating?, RatingSystem?, BlockedTags?, HolixProfileId?}`. `AgeRating` is required for children; default `18+` otherwise |
@@ -400,6 +415,17 @@ POST /Holix/Profiles/{id}/Session {JellyfinProof, …}
 ```
 
 The proof is single-use; clients use it immediately and never store or log it.
+
+Another device of the same household (signed in to the Holix account, no Jellyfin password):
+
+```text
+holix-cloud GET  /v1/servers                       addresses + server_id; plugin.household_linked
+GET  /System/Info/Public                           pick the address whose Id matches server_id
+GET  /Holix/Info                                   Features contains "cloud-session"
+holix-cloud POST /v1/servers/{id}/session-proof {device_id} → session_proof (≤ 60 s)
+POST /Holix/Household/CloudSession {Proof, DeviceId, DeviceName}
+                                                   → owner token + Household (profiles); continue as above
+```
 
 ## Guest profiles: no history
 

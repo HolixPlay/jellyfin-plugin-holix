@@ -431,6 +431,137 @@ public sealed class HouseholdService
     }
 
     /// <summary>
+    /// Account-first sign-in: opens a session with a holix-cloud session proof instead of the owner's password. The
+    /// proof names the household (<c>hid</c>), this server and the device; the household must be linked to that cloud
+    /// household (the owner did it with their own token). Without <see cref="CloudSessionRequest.ProfileId"/> (or with
+    /// the owner's id) the owner's session is opened; for a profile the usual profile session rules apply, including
+    /// the PIN proof (<see cref="CloudSessionRequest.ProfileProof"/>). The response carries the household so the
+    /// device gets the profile list too. No Holix Pro check (client licence).
+    /// </summary>
+    /// <param name="request">Request body.</param>
+    /// <param name="remoteEndPoint">Remote address.</param>
+    /// <returns>The session and the household.</returns>
+    public async Task<ProfileSessionDto> OpenCloudSessionAsync(CloudSessionRequest request, string? remoteEndPoint)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!Config.AllowCloudSessions)
+        {
+            throw new HolixException(403, "cloud_session_disabled", "Signing in with the Holix account is turned off on this server; sign in with the Jellyfin password.");
+        }
+
+        var deviceId = EmptyToNull(request.DeviceId)
+            ?? throw HolixException.BadRequest("device_required", "DeviceId is required (the same value given to holix-cloud).");
+        if (string.IsNullOrWhiteSpace(request.Proof))
+        {
+            throw HolixException.BadRequest("proof_required", "Proof is required (holix-cloud POST /v1/servers/{id}/session-proof).");
+        }
+
+        PruneDeleted();
+        var hid = CloudSessionVerifier.ReadHouseholdId(request.Proof);
+        var h = Store.All()
+            .Where(x => x.Cloud is not null && string.Equals(x.Cloud.HouseholdId, hid, StringComparison.Ordinal))
+            .OrderByDescending(x => x.Cloud!.LinkedUtc)
+            .FirstOrDefault()
+            ?? throw new HolixException(404, "household_not_linked", "No household on this server is linked to this Holix account.");
+
+        SessionProofClaims claims;
+        try
+        {
+            claims = CloudSessionVerifier.Check(request.Proof, h.Cloud!, ServerId, deviceId, DateTimeOffset.UtcNow);
+        }
+        catch (HolixException ex) when (ex.Code == CloudProofVerifier.UnknownKeyCode)
+        {
+            var refreshed = await RefreshKeysAsync(h.OwnerUserId, h.Cloud!).ConfigureAwait(false);
+            if (refreshed is null)
+            {
+                throw;
+            }
+
+            claims = CloudSessionVerifier.Check(request.Proof, refreshed, ServerId, deviceId, DateTimeOffset.UtcNow);
+        }
+
+        var owner = _userManager.GetUserById(h.OwnerUserId)
+            ?? throw new HolixException(404, "household_not_linked", "The household owner no longer exists on this server.");
+        var ownerPolicy = _userManager.GetUserDto(owner).Policy;
+        if (ownerPolicy?.IsDisabled == true)
+        {
+            throw new HolixException(403, "owner_disabled", "The household owner's Jellyfin account is disabled.");
+        }
+
+        var profileId = request.ProfileId is { } p && p != Guid.Empty ? p : h.OwnerUserId;
+        var isOwner = profileId == h.OwnerUserId;
+
+        // Household-wide screen limit before the proof is consumed, so a refused request does not burn it.
+        var now = DateTime.UtcNow;
+        var sessions = _sessionManager.Sessions.ToList();
+        HouseholdSessionLimit.Check(
+            h,
+            ownerPolicy?.MaxActiveSessions ?? 0,
+            sessions.Select(Snapshot).ToList(),
+            deviceId,
+            isOwner ? deviceId : DeriveDeviceId(deviceId, profileId),
+            now);
+        CloudSessionVerifier.Consume(claims, DateTimeOffset.UtcNow, _replay);
+
+        ProfileSessionDto session;
+        if (!isOwner)
+        {
+            var pid = profileId;
+            session = await OpenSessionAsync(
+                owner,
+                deviceId,
+                request.App,
+                request.AppVersion,
+                request.DeviceName,
+                remoteEndPoint,
+                pid,
+                new SessionRequest
+                {
+                    DeviceId = deviceId,
+                    DeviceName = request.DeviceName,
+                    App = request.App,
+                    AppVersion = request.AppVersion,
+                    JellyfinProof = request.ProfileProof,
+                }).ConfigureAwait(false);
+        }
+        else
+        {
+            AuthenticationResult result;
+            try
+            {
+                result = await _sessionManager.AuthenticateDirect(new AuthenticationRequest
+                {
+                    UserId = owner.Id,
+                    DeviceId = deviceId,
+                    DeviceName = EmptyToNull(request.DeviceName) ?? "Holix Play",
+                    App = EmptyToNull(request.App) ?? "Holix Play",
+                    AppVersion = EmptyToNull(request.AppVersion) ?? "0",
+                    RemoteEndPoint = remoteEndPoint ?? string.Empty,
+                }).ConfigureAwait(false);
+            }
+            catch (SecurityException ex)
+            {
+                // Jellyfin's own per-user limit (MaxActiveSessions) or device access policy.
+                throw HolixException.Conflict(HouseholdSessionLimit.ErrorCode, "Jellyfin refused the session: " + ex.Message);
+            }
+
+            session = new ProfileSessionDto
+            {
+                Profile = OwnerDto(h),
+                AccessToken = result.AccessToken,
+                DeviceId = deviceId,
+                ServerId = result.ServerId,
+                Authentication = result,
+                ProofVerified = true,
+            };
+        }
+
+        _logger.LogInformation("Holix: device {Device} signed in to household of {Owner} with a holix-cloud session proof (profile {Profile})", EmptyToNull(request.DeviceName) ?? deviceId, owner.Username, session.Profile.UserName);
+        session.Household = ToDto(h, "owner", ProfilesOf(h));
+        return session;
+    }
+
+    /// <summary>
     /// Links the household to holix-cloud (owner, only while not linked). The code is obtained from the cloud
     /// (<c>POST /v1/jellyfin/link-code</c>); the cloud URL comes only from the plugin settings.
     /// </summary>

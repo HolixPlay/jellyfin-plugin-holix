@@ -30,6 +30,13 @@
                         </label>
                         <div class="fieldDescription checkboxFieldDescription" data-i18n="requireLinkDesc">When off (transition period), unlinked households keep the old behaviour and sessions open with a warning.</div>
                     </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="AllowCloudSessions" type="checkbox" is="emby-checkbox" />
+                            <span data-i18n="allowCloudSessions">Allow sign-in with the Holix account</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription" data-i18n="allowCloudSessionsDesc">Devices signed in to a linked household's Holix account get the owner's session without the Jellyfin password (short-lived proof signed by holix-cloud). Profile PINs still apply.</div>
+                    </div>
                     <div class="selectContainer">
                         <label class="selectLabel" for="GuestBehavior" data-i18n="guestBehavior">Guest profile behaviour</label>
                         <select is="emby-select" id="GuestBehavior" name="GuestBehavior" class="emby-select-withcolor emby-select">
@@ -103,6 +110,8 @@
                         requireProofDesc: "When on, the owner token alone is not enough: a PIN-protected profile cannot be opened until holix-cloud verifies the PIN, and the profiles' cloud mapping is locked.",
                         requireLink: 'Refuse profile sessions in households not linked to holix-cloud',
                         requireLinkDesc: 'When off (transition period), unlinked households keep the old behaviour and sessions open with a warning.',
+                        allowCloudSessions: 'Allow sign-in with the Holix account',
+                        allowCloudSessionsDesc: "Devices signed in to a linked household's Holix account get the owner's session without the Jellyfin password (short-lived proof signed by holix-cloud). Profile PINs still apply.",
                         guestBehavior: 'Guest profile behaviour',
                         guestDiscardPlaystate: 'No history (position, played flag and play count are discarded)',
                         guestDiscardAll: 'No history, favorites, likes or ratings',
@@ -149,6 +158,8 @@
                         requireProofDesc: "Açıkken sahip belirteci tek başına yetmez: PIN'li profil, PIN holix-cloud'da doğrulanmadan açılamaz; profillerin bulut eşlemesi kilitlenir.",
                         requireLink: 'Buluta bağlı olmayan hanelerde profil oturumu açılmasın',
                         requireLinkDesc: 'Kapalıyken (geçiş dönemi) bağsız hane eski davranışla, uyarıyla açılır.',
+                        allowCloudSessions: 'Holix hesabıyla girişe izin ver',
+                        allowCloudSessionsDesc: "Buluta bağlı hanenin Holix hesabına girmiş cihazlar, Jellyfin parolası olmadan sahibin oturumunu alır (holix-cloud'un imzaladığı kısa ömürlü kanıtla). Profil PIN'leri yine sorulur.",
                         guestBehavior: 'Misafir profil davranışı',
                         guestDiscardPlaystate: 'Geçmiş tutulmaz (konum, izlendi, oynatma sayısı silinir)',
                         guestDiscardAll: 'Geçmiş + favori/beğeni/puan tutulmaz',
@@ -384,6 +395,7 @@
                         page.querySelector('#CloudUrl').value = config.CloudUrl || '';
                         page.querySelector('#RequireCloudProof').checked = config.RequireCloudProof !== false;
                         page.querySelector('#RequireCloudLink').checked = config.RequireCloudLink === true;
+                        page.querySelector('#AllowCloudSessions').checked = config.AllowCloudSessions !== false;
                         page.querySelector('#GuestBehavior').value = config.GuestBehavior || 'DiscardPlaystate';
                         page.querySelector('#DefaultRatingSystem').value = config.DefaultRatingSystem || 'TR';
                         page.querySelector('#MaxProfilesPerHousehold').value = config.MaxProfilesPerHousehold || 10;
@@ -405,6 +417,7 @@
                         config.CloudUrl = page.querySelector('#CloudUrl').value.trim();
                         config.RequireCloudProof = page.querySelector('#RequireCloudProof').checked;
                         config.RequireCloudLink = page.querySelector('#RequireCloudLink').checked;
+                        config.AllowCloudSessions = page.querySelector('#AllowCloudSessions').checked;
                         config.GuestBehavior = page.querySelector('#GuestBehavior').value;
                         config.DefaultRatingSystem = page.querySelector('#DefaultRatingSystem').value;
                         config.MaxProfilesPerHousehold = parseInt(page.querySelector('#MaxProfilesPerHousehold').value, 10) || 10;

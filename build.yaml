@@ -1,7 +1,7 @@
 # jprm (Jellyfin Plugin Repository Manager) format; scripts/package.sh uses the same values.
 name: "Holix"
 guid: "06f19487-387d-4e2f-be1d-71f44efff069"
-version: "0.5.2.0"
+version: "0.5.3.0"
 targetAbi: "12.2.0.0"
 framework: "net10.0"
 overview: "Holix Play: household/profile mapping, profile sessions, no watch history for guests"
@@ -15,6 +15,10 @@ artifacts:
 - "Jellyfin.Plugin.Holix.dll"
 - "BouncyCastle.Cryptography.dll"
 changelog: >
+  0.5.3.0: account-first sign-in — POST /Holix/Household/CloudSession opens the owner's (or a profile's) session
+  with a short-lived, single-use, device-bound session proof signed by holix-cloud, so a household's other devices
+  only sign in to the Holix account (no Jellyfin password); the response includes the household and its profiles.
+  PIN rules unchanged. New setting AllowCloudSessions (default on), feature flag cloud-session.
   0.5.2.0: household-wide session limit — profiles copy the owner's MaxActiveSessions, and the owner plus all
   profiles together may watch on at most that many screens (409 household_session_limit); "Who can create a
   household" setting (Everyone / Administrators only / Selected users, picked by name) replaces the

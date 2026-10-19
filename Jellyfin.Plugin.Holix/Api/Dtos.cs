@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using MediaBrowser.Controller.Authentication;
 
 namespace Jellyfin.Plugin.Holix.Api;
@@ -220,6 +221,44 @@ public sealed class ProfileSessionDto
 
     /// <summary>Gets or sets a warning (e.g. <c>cloud_not_linked</c>: transition period, opened without a proof).</summary>
     public string? Warning { get; set; }
+
+    /// <summary>
+    /// Gets or sets the household (owner view, same as <c>GET /Holix/Household</c>); only in the
+    /// <c>POST /Holix/Household/CloudSession</c> response, so a new device gets the profile list without a password.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public HouseholdDto? Household { get; set; }
+}
+
+/// <summary>
+/// Body of <c>POST /Holix/Household/CloudSession</c>: opens a session with a holix-cloud session proof instead of the
+/// owner's password (account-first sign-in).
+/// </summary>
+public sealed class CloudSessionRequest
+{
+    /// <summary>Gets or sets the session proof (holix-cloud <c>POST /v1/servers/{id}/session-proof</c>, ≤ 60 s, single use).</summary>
+    public string? Proof { get; set; }
+
+    /// <summary>Gets or sets the device id; must equal the proof's <c>device_id</c>.</summary>
+    public string? DeviceId { get; set; }
+
+    /// <summary>Gets or sets the device name.</summary>
+    public string? DeviceName { get; set; }
+
+    /// <summary>Gets or sets the app name.</summary>
+    public string? App { get; set; }
+
+    /// <summary>Gets or sets the app version.</summary>
+    public string? AppVersion { get; set; }
+
+    /// <summary>Gets or sets the profile (Jellyfin user id) to open; empty = the household owner.</summary>
+    public Guid? ProfileId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the profile proof (<c>jellyfin_proof</c> from holix-cloud's profile session, after the PIN) when
+    /// <see cref="ProfileId"/> is a profile; same rules as <c>POST /Holix/Profiles/{id}/Session</c>.
+    /// </summary>
+    public string? ProfileProof { get; set; }
 }
 
 /// <summary>Error body (same shape as holix-cloud's).</summary>

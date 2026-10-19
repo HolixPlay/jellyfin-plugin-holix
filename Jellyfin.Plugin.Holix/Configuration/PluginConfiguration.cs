@@ -56,6 +56,13 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public bool RequireCloudLink { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether devices signed in to a linked household's Holix account may open the
+    /// owner's session with a holix-cloud session proof, without the owner's password
+    /// (<c>POST /Holix/Household/CloudSession</c>). Profile PIN rules still apply. Default: on.
+    /// </summary>
+    public bool AllowCloudSessions { get; set; } = true;
+
     /// <summary>Gets or sets the guest profile behaviour.</summary>
     public GuestBehavior GuestBehavior { get; set; } = GuestBehavior.DiscardPlaystate;
 
