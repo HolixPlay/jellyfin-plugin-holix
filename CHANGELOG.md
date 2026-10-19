@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- Removed the ClipsUrl setting; preview clips now use Jellyfin's standard theme videos (backdrops folder).
+
 ## 0.5.0
 
 - New `ClipsUrl` setting (Dashboard → Plugins → Holix): the address of the holix-clips service that makes

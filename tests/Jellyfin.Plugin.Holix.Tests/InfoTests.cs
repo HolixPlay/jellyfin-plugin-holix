@@ -1,5 +1,8 @@
 using System;
+using System.IO;
 using System.Text.Json;
+using System.Xml;
+using System.Xml.Serialization;
 using Jellyfin.Plugin.Holix.Api;
 using Jellyfin.Plugin.Holix.Configuration;
 
@@ -7,41 +10,61 @@ namespace Jellyfin.Plugin.Holix.Tests;
 
 public class InfoTests
 {
-    [Theory]
-    [InlineData("https://jf.example.com/holix-clips", "https://jf.example.com/holix-clips")]
-    [InlineData("  https://jf.example.com/holix-clips/  ", "https://jf.example.com/holix-clips")]
-    [InlineData("http://192.168.1.10:8085", "http://192.168.1.10:8085")]
-    [InlineData("", null)]
-    [InlineData("   ", null)]
-    [InlineData(null, null)]
-    [InlineData("/holix-clips", null)]
-    [InlineData("ftp://jf.example.com/clips", null)]
-    [InlineData("javascript:alert(1)", null)]
-    [InlineData("https://jf.example.com/clips?x=1", null)]
-    [InlineData("https://user:pw@jf.example.com/clips", null)]
-    public void Clips_url_is_normalized(string? input, string? expected)
-    {
-        Assert.Equal(expected, HolixController.NormalizeClipsUrl(input));
-    }
-
     [Fact]
-    public void Info_omits_clips_url_when_not_set()
+    public void Info_has_no_clips_url()
     {
-        var info = HolixController.BuildInfo(new PluginConfiguration(), new Version(0, 5, 0, 0));
-        Assert.Null(info.ClipsUrl);
-        Assert.Contains("clips-url", info.Features);
+        var info = HolixController.BuildInfo(new PluginConfiguration(), new Version(0, 5, 1, 0));
+        Assert.DoesNotContain("clips-url", info.Features);
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(info));
         Assert.False(doc.RootElement.TryGetProperty("ClipsUrl", out _));
         Assert.Equal("https://api.holixplay.com", doc.RootElement.GetProperty("CloudUrl").GetString());
-        Assert.Equal("0.5.0.0", doc.RootElement.GetProperty("Version").GetString());
+        Assert.Equal("0.5.1.0", doc.RootElement.GetProperty("Version").GetString());
     }
 
     [Fact]
-    public void Info_announces_configured_clips_url()
+    public void Old_config_with_clips_url_still_loads()
     {
-        var config = new PluginConfiguration { ClipsUrl = "https://demo.example.com/holix-clips/" };
-        var info = HolixController.BuildInfo(config, null);
-        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(info));
-        Assert.Equal("https://demo.example.com/holix-clips", doc.RootElement.GetProperty("ClipsUrl").GetString());
+        // A 0.5.0 settings file (plugins/configurations/Jellyfin.Plugin.Holix.xml) still has <ClipsUrl>.
+        // Jellyfin reads it with XmlSerializer, which must skip the unknown element and keep the rest.
+        const string Xml = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <PluginConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+              <CloudUrl>https://cloud.example.com</CloudUrl>
+              <ClipsUrl>https://jf.example.com/holix-clips</ClipsUrl>
+              <RequireCloudProof>false</RequireCloudProof>
+              <RequireCloudLink>true</RequireCloudLink>
+              <GuestBehavior>KeepPlaystate</GuestBehavior>
+              <DefaultRatingSystem>DE</DefaultRatingSystem>
+              <StreamAuthAllowedProxies>
+                <string>10.0.0.0/8</string>
+              </StreamAuthAllowedProxies>
+              <MaxProfilesPerHousehold>6</MaxProfilesPerHousehold>
+            </PluginConfiguration>
+            """;
+
+        var unknown = 0;
+        var serializer = new XmlSerializer(typeof(PluginConfiguration));
+        serializer.UnknownElement += (_, e) =>
+        {
+            Assert.Equal("ClipsUrl", e.Element.Name);
+            unknown++;
+        };
+
+        using var reader = XmlReader.Create(new StringReader(Xml));
+        var config = Assert.IsType<PluginConfiguration>(serializer.Deserialize(reader));
+
+        Assert.Equal(1, unknown);
+        Assert.Equal("https://cloud.example.com", config.CloudUrl);
+        Assert.False(config.RequireCloudProof);
+        Assert.True(config.RequireCloudLink);
+        Assert.Equal(GuestBehavior.KeepPlaystate, config.GuestBehavior);
+        Assert.Equal("DE", config.DefaultRatingSystem);
+        Assert.Equal(["10.0.0.0/8"], config.StreamAuthAllowedProxies);
+        Assert.Equal(6, config.MaxProfilesPerHousehold);
+
+        // Saving again drops the element.
+        using var writer = new StringWriter();
+        serializer.Serialize(writer, config);
+        Assert.DoesNotContain("ClipsUrl", writer.ToString(), StringComparison.Ordinal);
     }
 }

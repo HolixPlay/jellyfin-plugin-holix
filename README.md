@@ -99,7 +99,6 @@ lost, the profile users stay in Jellyfin but the mapping is gone.
 | Setting | Default | Description |
 |---|---|---|
 | `CloudUrl` | `https://api.holixplay.com` | holix-cloud base URL (https; http only for localhost). Announced to clients in `/Holix/Info`; the plugin only ever contacts this URL (link code + public keys) |
-| `ClipsUrl` | empty | holix-clips preview clip service URL (for example `https://jellyfin.example.com/holix-clips`). Announced to clients as `ClipsUrl` in `/Holix/Info`; omitted when empty. The plugin never contacts it |
 | `RequireCloudProof` | **on** | In a cloud-linked household, profile sessions require a holix-cloud proof; cloud profile mappings are locked |
 | `RequireCloudLink` | off | When on, households that are not linked to holix-cloud cannot open profile sessions at all |
 | `GuestBehavior` | `DiscardPlaystate` | `DiscardAllUserData` (also favourites/ratings) or `KeepPlaystate` (protection off) |
@@ -306,7 +305,7 @@ Errors: `{"Error": "<code>", "Message": "…"}`.
 
 | Method and path | Auth | Description |
 |---|---|---|
-| `GET /Holix/Info` | anonymous | `Version`, `ApiVersion` (1), `Features` (`cloud-proof`, `profile-image`, `clips-url`, …), `CloudUrl`, `ClipsUrl` (only when set), `GuestBehavior`, `RatingSystems`, `DefaultRatingSystem`, `AgeRatings`, `MaxProfiles`, `RequireCloudProof`, `RequireCloudLink`. 404 → plugin not installed → single-profile mode |
+| `GET /Holix/Info` | anonymous | `Version`, `ApiVersion` (1), `Features` (`cloud-proof`, `profile-image`, …), `CloudUrl`, `GuestBehavior`, `RatingSystems`, `DefaultRatingSystem`, `AgeRatings`, `MaxProfiles`, `RequireCloudProof`, `RequireCloudLink`. 404 → plugin not installed → single-profile mode |
 | `GET /Holix/Household` | user | Owner: household, all profiles (owner first, `IsOwner=true`) and `Cloud` link info (or `null`). Profile user: `Role="profile"` and only its own profile. 404 if none |
 | `POST /Holix/Household` | admin\* | Makes the caller a household owner (idempotent). `{RatingSystem?: "TR"\|"US"\|"DE", OwnerHolixProfileId?}` |
 | `DELETE /Holix/Household?deleteProfileUsers=true` | owner | Deletes the household (by default with its profile users) |
